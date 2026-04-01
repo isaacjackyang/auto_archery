@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 612 612" width="612" height="612">
+  <title>Classic archery target face</title>
+  <desc>Scoring layout: X inner gold, 10 middle gold, 9 outer gold, 8 inner red, 7 outer red, 6 inner blue, 5 outer blue, 4 inner black, 3 outer black, 2 inner white, 1 outer white.</desc>
+
+  <circle cx="306" cy="306" r="280" fill="#f7f5ef"/>
+  <circle cx="306" cy="306" r="224" fill="#1c1c1c"/>
+  <circle cx="306" cy="306" r="168" fill="#45b8f5"/>
+  <circle cx="306" cy="306" r="112" fill="#ff3b16"/>
+  <circle cx="306" cy="306" r="56" fill="#f8cb31"/>
+
+  <g fill="none" stroke-linecap="round">
+    <circle cx="306" cy="306" r="280" stroke="#2a2a2a" stroke-width="1.4"/>
+    <circle cx="306" cy="306" r="252" stroke="#666666" stroke-width="1.2"/>
+    <circle cx="306" cy="306" r="224" stroke="#666666" stroke-width="1.2"/>
+    <circle cx="306" cy="306" r="196" stroke="#666666" stroke-width="1.2"/>
+    <circle cx="306" cy="306" r="168" stroke="#666666" stroke-width="1.2"/>
+    <circle cx="306" cy="306" r="140" stroke="#666666" stroke-width="1.2"/>
+    <circle cx="306" cy="306" r="112" stroke="#666666" stroke-width="1.2"/>
+    <circle cx="306" cy="306" r="84" stroke="#666666" stroke-width="1.2"/>
+    <circle cx="306" cy="306" r="56" stroke="#666666" stroke-width="1.2"/>
+    <circle cx="306" cy="306" r="28" stroke="#666666" stroke-width="1.2"/>
+    <circle cx="306" cy="306" r="14" stroke="#666666" stroke-width="1.2"/>
+    <line x1="298" y1="306" x2="314" y2="306" stroke="#666666" stroke-width="1.2"/>
+    <line x1="306" y1="298" x2="306" y2="314" stroke="#666666" stroke-width="1.2"/>
+  </g>
+</svg>

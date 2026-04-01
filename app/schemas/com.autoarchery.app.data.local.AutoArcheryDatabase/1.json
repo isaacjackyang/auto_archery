@@ -1,0 +1,729 @@
+{
+  "formatVersion": 1,
+  "database": {
+    "version": 1,
+    "identityHash": "5ea6e3d6cf4409a76b05ac529fe36afd",
+    "entities": [
+      {
+        "tableName": "athlete_profile",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `display_name` TEXT NOT NULL, `status` TEXT NOT NULL, `notes` TEXT, `created_at` INTEGER NOT NULL, `updated_at` INTEGER NOT NULL, PRIMARY KEY(`id`))",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "displayName",
+            "columnName": "display_name",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "status",
+            "columnName": "status",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "notes",
+            "columnName": "notes",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "createdAt",
+            "columnName": "created_at",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "updatedAt",
+            "columnName": "updated_at",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "id"
+          ]
+        }
+      },
+      {
+        "tableName": "training_session",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `athlete_id` TEXT NOT NULL, `title` TEXT NOT NULL, `athlete_name` TEXT, `started_at` INTEGER NOT NULL, `ended_at` INTEGER, `bow_type` TEXT NOT NULL, `distance_m` INTEGER NOT NULL, `target_face_code` TEXT NOT NULL, `arrows_per_end` INTEGER NOT NULL, `arrow_diameter_mm` REAL NOT NULL, `training_goal` TEXT, `drill_tags_json` TEXT, `location_name` TEXT, `environment_type` TEXT, `equipment_note` TEXT, `environment_note` TEXT, `device_model` TEXT NOT NULL, `camera_mode` TEXT NOT NULL, `notes` TEXT, `comparison_baseline_session_id` TEXT, `coach_summary_text` TEXT, `total_ends` INTEGER NOT NULL, `total_arrows` INTEGER NOT NULL, `total_score` INTEGER NOT NULL, `avg_score` REAL NOT NULL, `created_at` INTEGER NOT NULL, `updated_at` INTEGER NOT NULL, PRIMARY KEY(`id`))",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "athleteId",
+            "columnName": "athlete_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "title",
+            "columnName": "title",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "athleteName",
+            "columnName": "athlete_name",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "startedAt",
+            "columnName": "started_at",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "endedAt",
+            "columnName": "ended_at",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "bowType",
+            "columnName": "bow_type",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "distanceM",
+            "columnName": "distance_m",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "targetFaceCode",
+            "columnName": "target_face_code",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "arrowsPerEnd",
+            "columnName": "arrows_per_end",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "arrowDiameterMm",
+            "columnName": "arrow_diameter_mm",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "trainingGoal",
+            "columnName": "training_goal",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "drillTagsJson",
+            "columnName": "drill_tags_json",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "locationName",
+            "columnName": "location_name",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "environmentType",
+            "columnName": "environment_type",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "equipmentNote",
+            "columnName": "equipment_note",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "environmentNote",
+            "columnName": "environment_note",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "deviceModel",
+            "columnName": "device_model",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "cameraMode",
+            "columnName": "camera_mode",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "notes",
+            "columnName": "notes",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "comparisonBaselineSessionId",
+            "columnName": "comparison_baseline_session_id",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "coachSummaryText",
+            "columnName": "coach_summary_text",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "totalEnds",
+            "columnName": "total_ends",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "totalArrows",
+            "columnName": "total_arrows",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "totalScore",
+            "columnName": "total_score",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "avgScore",
+            "columnName": "avg_score",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "createdAt",
+            "columnName": "created_at",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "updatedAt",
+            "columnName": "updated_at",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "id"
+          ]
+        }
+      },
+      {
+        "tableName": "training_end",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `session_id` TEXT NOT NULL, `end_index` INTEGER NOT NULL, `started_at` INTEGER NOT NULL, `completed_at` INTEGER, `status` TEXT NOT NULL, `expected_arrow_count` INTEGER NOT NULL, `detected_arrow_count` INTEGER NOT NULL, `subtotal_score` INTEGER NOT NULL, `x_count` INTEGER NOT NULL, `ten_count` INTEGER NOT NULL, `group_ctc_mm` REAL, `accuracy_offset_mm` REAL, `precision_mean_radius_mm` REAL, `cpk_x` REAL, `cpk_y` REAL, `review_required` INTEGER NOT NULL, `coach_summary_text` TEXT, `created_at` INTEGER NOT NULL, `updated_at` INTEGER NOT NULL, PRIMARY KEY(`id`))",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "sessionId",
+            "columnName": "session_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "endIndex",
+            "columnName": "end_index",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "startedAt",
+            "columnName": "started_at",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "completedAt",
+            "columnName": "completed_at",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "status",
+            "columnName": "status",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "expectedArrowCount",
+            "columnName": "expected_arrow_count",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "detectedArrowCount",
+            "columnName": "detected_arrow_count",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "subtotalScore",
+            "columnName": "subtotal_score",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "xCount",
+            "columnName": "x_count",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "tenCount",
+            "columnName": "ten_count",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "groupCtcMm",
+            "columnName": "group_ctc_mm",
+            "affinity": "REAL"
+          },
+          {
+            "fieldPath": "accuracyOffsetMm",
+            "columnName": "accuracy_offset_mm",
+            "affinity": "REAL"
+          },
+          {
+            "fieldPath": "precisionMeanRadiusMm",
+            "columnName": "precision_mean_radius_mm",
+            "affinity": "REAL"
+          },
+          {
+            "fieldPath": "cpkX",
+            "columnName": "cpk_x",
+            "affinity": "REAL"
+          },
+          {
+            "fieldPath": "cpkY",
+            "columnName": "cpk_y",
+            "affinity": "REAL"
+          },
+          {
+            "fieldPath": "reviewRequired",
+            "columnName": "review_required",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "coachSummaryText",
+            "columnName": "coach_summary_text",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "createdAt",
+            "columnName": "created_at",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "updatedAt",
+            "columnName": "updated_at",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "id"
+          ]
+        }
+      },
+      {
+        "tableName": "arrow_shot",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `end_id` TEXT NOT NULL, `arrow_index` INTEGER NOT NULL, `detected_at` INTEGER NOT NULL, `score_value` INTEGER NOT NULL, `is_x` INTEGER NOT NULL, `clock_hour` INTEGER NOT NULL, `angle_deg` REAL NOT NULL, `radius_mm` REAL NOT NULL, `x_mm` REAL NOT NULL, `y_mm` REAL NOT NULL, `confidence` REAL NOT NULL, `auto_score_value` INTEGER NOT NULL, `auto_is_x` INTEGER NOT NULL, `auto_x_mm` REAL NOT NULL, `auto_y_mm` REAL NOT NULL, `corrected_score_value` INTEGER, `corrected_is_x` INTEGER, `corrected_x_mm` REAL, `corrected_y_mm` REAL, `is_manually_corrected` INTEGER NOT NULL, `result_status` TEXT NOT NULL, `input_method` TEXT NOT NULL, `is_deleted` INTEGER NOT NULL, `deleted_at` INTEGER, `confirmed_at` INTEGER, `announce_text` TEXT NOT NULL, `source_snapshot_id` TEXT, `notes` TEXT, PRIMARY KEY(`id`))",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "endId",
+            "columnName": "end_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "arrowIndex",
+            "columnName": "arrow_index",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "detectedAt",
+            "columnName": "detected_at",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "scoreValue",
+            "columnName": "score_value",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "isX",
+            "columnName": "is_x",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "clockHour",
+            "columnName": "clock_hour",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "angleDeg",
+            "columnName": "angle_deg",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "radiusMm",
+            "columnName": "radius_mm",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "xMm",
+            "columnName": "x_mm",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "yMm",
+            "columnName": "y_mm",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "confidence",
+            "columnName": "confidence",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "autoScoreValue",
+            "columnName": "auto_score_value",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "autoIsX",
+            "columnName": "auto_is_x",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "autoXMm",
+            "columnName": "auto_x_mm",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "autoYMm",
+            "columnName": "auto_y_mm",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "correctedScoreValue",
+            "columnName": "corrected_score_value",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "correctedIsX",
+            "columnName": "corrected_is_x",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "correctedXMm",
+            "columnName": "corrected_x_mm",
+            "affinity": "REAL"
+          },
+          {
+            "fieldPath": "correctedYMm",
+            "columnName": "corrected_y_mm",
+            "affinity": "REAL"
+          },
+          {
+            "fieldPath": "isManuallyCorrected",
+            "columnName": "is_manually_corrected",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "resultStatus",
+            "columnName": "result_status",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "inputMethod",
+            "columnName": "input_method",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "isDeleted",
+            "columnName": "is_deleted",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "deletedAt",
+            "columnName": "deleted_at",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "confirmedAt",
+            "columnName": "confirmed_at",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "announceText",
+            "columnName": "announce_text",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "sourceSnapshotId",
+            "columnName": "source_snapshot_id",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "notes",
+            "columnName": "notes",
+            "affinity": "TEXT"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "id"
+          ]
+        }
+      },
+      {
+        "tableName": "coach_note",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `session_id` TEXT, `end_id` TEXT, `arrow_shot_id` TEXT, `note_level` TEXT NOT NULL, `note_text` TEXT NOT NULL, `created_at` INTEGER NOT NULL, `updated_at` INTEGER NOT NULL, PRIMARY KEY(`id`))",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "sessionId",
+            "columnName": "session_id",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "endId",
+            "columnName": "end_id",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "arrowShotId",
+            "columnName": "arrow_shot_id",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "noteLevel",
+            "columnName": "note_level",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "noteText",
+            "columnName": "note_text",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "createdAt",
+            "columnName": "created_at",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "updatedAt",
+            "columnName": "updated_at",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "id"
+          ]
+        }
+      },
+      {
+        "tableName": "operation_log",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `session_id` TEXT NOT NULL, `end_id` TEXT, `arrow_shot_id` TEXT, `operation_type` TEXT NOT NULL, `payload_json` TEXT, `created_at` INTEGER NOT NULL, PRIMARY KEY(`id`))",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "sessionId",
+            "columnName": "session_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "endId",
+            "columnName": "end_id",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "arrowShotId",
+            "columnName": "arrow_shot_id",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "operationType",
+            "columnName": "operation_type",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "payloadJson",
+            "columnName": "payload_json",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "createdAt",
+            "columnName": "created_at",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "id"
+          ]
+        }
+      },
+      {
+        "tableName": "session_export",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `session_id` TEXT NOT NULL, `export_format` TEXT NOT NULL, `file_path` TEXT NOT NULL, `created_at` INTEGER NOT NULL, PRIMARY KEY(`id`))",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "sessionId",
+            "columnName": "session_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "exportFormat",
+            "columnName": "export_format",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "filePath",
+            "columnName": "file_path",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "createdAt",
+            "columnName": "created_at",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "id"
+          ]
+        }
+      },
+      {
+        "tableName": "app_preference",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER NOT NULL, `default_athlete_id` TEXT, `display_language` TEXT NOT NULL, `tts_follow_display_language` INTEGER NOT NULL, `created_at` INTEGER NOT NULL, `updated_at` INTEGER NOT NULL, PRIMARY KEY(`id`))",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "defaultAthleteId",
+            "columnName": "default_athlete_id",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "displayLanguage",
+            "columnName": "display_language",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "ttsFollowDisplayLanguage",
+            "columnName": "tts_follow_display_language",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "createdAt",
+            "columnName": "created_at",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "updatedAt",
+            "columnName": "updated_at",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "id"
+          ]
+        }
+      }
+    ],
+    "setupQueries": [
+      "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '5ea6e3d6cf4409a76b05ac529fe36afd')"
+    ]
+  }
+}
