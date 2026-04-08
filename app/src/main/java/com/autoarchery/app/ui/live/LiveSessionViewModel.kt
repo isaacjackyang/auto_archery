@@ -4,6 +4,7 @@ import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.autoarchery.app.AutoArcheryApplication
+import com.autoarchery.app.R
 import com.autoarchery.app.data.local.entity.ArrowShotEntity
 import com.autoarchery.app.data.repository.RecordedShotResult
 import com.autoarchery.app.data.repository.SessionCalibrationInput
@@ -30,6 +31,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlin.math.abs
 import kotlin.math.max
 import kotlin.math.roundToInt
 
@@ -48,12 +50,17 @@ class LiveSessionViewModel(
     private var boundRouteSessionId: String = ACTIVE_SESSION_ROUTE
     private var isCameraReady: Boolean = false
     private var isRecordingDetection: Boolean = false
+    private var resolvedCameraProfile: ResolvedCameraProfile? = null
 
     fun bindSession(sessionId: String) {
         if (boundRouteSessionId == sessionId && (_uiState.value.sessionId != null || _uiState.value.isSessionSetupVisible)) {
             return
         }
         boundRouteSessionId = sessionId
+        disarmRecognition(
+            nextCalibrationState = if (isCameraReady) CalibrationState.NeedsCalibration else CalibrationState.NotReady,
+            clearCalibrationLabel = true,
+        )
         refresh()
     }
 
@@ -110,7 +117,7 @@ class LiveSessionViewModel(
                 yMm = correctedYMm,
                 previewScoreValue = correction.scoreValue,
                 previewScoreLabel = scoreLabel(correction.scoreValue, correction.isX),
-                previewClockLabel = clockLabel(correctedXMm, correctedYMm),
+                previewClockLabel = clockLabel(correctedXMm, correctedYMm, _uiState.value.targetFaceCode),
                 isDirty = true,
             ),
         ).recalculate()
@@ -130,26 +137,45 @@ class LiveSessionViewModel(
             speakShot(
                 scoreValue = selectedShot.scoreValue,
                 isX = selectedShot.isX,
-                clockHour = clockHour(selectedShot.xMm, selectedShot.yMm),
+                clockHour = clockHour(selectedShot.xMm, selectedShot.yMm, _uiState.value.targetFaceCode),
             )
         }
     }
 
     fun onCameraReadyChanged(isReady: Boolean) {
+        val readinessChanged = isCameraReady != isReady
         isCameraReady = isReady
         val nextState = when {
             !isReady -> CalibrationState.NotReady
+            readinessChanged -> CalibrationState.NeedsCalibration
             _uiState.value.calibrationState == CalibrationState.Calibrated -> CalibrationState.Calibrated
             else -> CalibrationState.NeedsCalibration
         }
         _uiState.value = _uiState.value.copy(
             calibrationState = nextState,
             calibrationLabel = calibrationLabel(nextState, null),
+            isRecognitionArmed = false,
+            recognitionLabel = recognitionLabel(
+                isCameraReady = isReady,
+                isArmed = false,
+                calibrationState = nextState,
+            ),
+            analysisResetToken = if (readinessChanged) _uiState.value.analysisResetToken + 1 else _uiState.value.analysisResetToken,
         )
     }
 
     fun onCameraProfileResolved(profile: ResolvedCameraProfile) {
-        _uiState.value = _uiState.value.copy(zoomLabel = profile.zoomLabel)
+        resolvedCameraProfile = profile
+        val currentState = _uiState.value
+        val nextZoomRatio = if (currentState.zoomLabel == WAITING_FOR_CAMERA_LABEL) {
+            profile.zoomRatio
+        } else {
+            currentState.zoomRatio.coerceAtLeast(profile.zoomRatio)
+        }
+        _uiState.value = currentState.copy(
+            zoomRatio = nextZoomRatio,
+            zoomLabel = formatZoomLabel(profile, nextZoomRatio),
+        )
         val sessionId = _uiState.value.sessionId ?: return
         viewModelScope.launch {
             sessionRepository.updateCameraProfile(
@@ -165,6 +191,11 @@ class LiveSessionViewModel(
         _uiState.value = _uiState.value.copy(
             calibrationState = CalibrationState.Calibrated,
             calibrationLabel = calibrationLabel(CalibrationState.Calibrated, result.confidence),
+            recognitionLabel = recognitionLabel(
+                isCameraReady = isCameraReady,
+                isArmed = _uiState.value.isRecognitionArmed,
+                calibrationState = CalibrationState.Calibrated,
+            ),
         )
         viewModelScope.launch {
             sessionRepository.updateCalibration(
@@ -209,6 +240,60 @@ class LiveSessionViewModel(
         _uiState.value = _uiState.value.copy(isPaused = !_uiState.value.isPaused)
     }
 
+    fun increaseDigitalZoom() {
+        if (!isCameraReady || _uiState.value.sessionId == null) return
+        val nextZoomRatio = (_uiState.value.zoomRatio + DIGITAL_ZOOM_STEP).coerceAtMost(MAX_REQUESTED_ZOOM_RATIO)
+        val nextCalibrationState = CalibrationState.NeedsCalibration
+        _uiState.value = _uiState.value.copy(
+            zoomRatio = nextZoomRatio,
+            zoomLabel = formatZoomLabel(resolvedCameraProfile, nextZoomRatio),
+            calibrationState = nextCalibrationState,
+            calibrationLabel = calibrationLabel(nextCalibrationState, null),
+            isRecognitionArmed = false,
+            recognitionLabel = recognitionLabel(
+                isCameraReady = isCameraReady,
+                isArmed = false,
+                calibrationState = nextCalibrationState,
+            ),
+            analysisResetToken = _uiState.value.analysisResetToken + 1,
+        )
+    }
+
+    fun decreaseDigitalZoom() {
+        if (!isCameraReady || _uiState.value.sessionId == null) return
+        val minimumZoomRatio = resolvedCameraProfile?.zoomRatio ?: 1f
+        val nextZoomRatio = (_uiState.value.zoomRatio - DIGITAL_ZOOM_STEP).coerceAtLeast(minimumZoomRatio)
+        if (abs(nextZoomRatio - _uiState.value.zoomRatio) < 0.01f) return
+        val nextCalibrationState = CalibrationState.NeedsCalibration
+        _uiState.value = _uiState.value.copy(
+            zoomRatio = nextZoomRatio,
+            zoomLabel = formatZoomLabel(resolvedCameraProfile, nextZoomRatio),
+            calibrationState = nextCalibrationState,
+            calibrationLabel = calibrationLabel(nextCalibrationState, null),
+            isRecognitionArmed = false,
+            recognitionLabel = recognitionLabel(
+                isCameraReady = isCameraReady,
+                isArmed = false,
+                calibrationState = nextCalibrationState,
+            ),
+            analysisResetToken = _uiState.value.analysisResetToken + 1,
+        )
+    }
+
+    fun onZoomRatioApplied(appliedZoomRatio: Float) {
+        val currentState = _uiState.value
+        if (abs(currentState.zoomRatio - appliedZoomRatio) < 0.01f) {
+            val formattedLabel = formatZoomLabel(resolvedCameraProfile, appliedZoomRatio)
+            if (currentState.zoomLabel == formattedLabel) return
+            _uiState.value = currentState.copy(zoomLabel = formattedLabel)
+            return
+        }
+        _uiState.value = currentState.copy(
+            zoomRatio = appliedZoomRatio,
+            zoomLabel = formatZoomLabel(resolvedCameraProfile, appliedZoomRatio),
+        )
+    }
+
     fun setReviewFilter(filter: ReviewFilter) {
         _uiState.value = _uiState.value.copy(reviewFilter = filter).recalculate()
     }
@@ -225,6 +310,14 @@ class LiveSessionViewModel(
         val sessionId = _uiState.value.sessionId ?: return
         viewModelScope.launch {
             sessionRepository.deleteLastShot(sessionId)
+            refresh()
+        }
+    }
+
+    fun clearCurrentEndShots() {
+        val sessionId = _uiState.value.sessionId ?: return
+        viewModelScope.launch {
+            sessionRepository.clearCurrentEndShots(sessionId)
             refresh()
         }
     }
@@ -253,25 +346,34 @@ class LiveSessionViewModel(
             _uiState.value = _uiState.value.copy(
                 calibrationState = nextState,
                 calibrationLabel = calibrationLabel(nextState, null),
+                isRecognitionArmed = false,
+                recognitionLabel = recognitionLabel(
+                    isCameraReady = isCameraReady,
+                    isArmed = false,
+                    calibrationState = nextState,
+                ),
+                analysisResetToken = _uiState.value.analysisResetToken + 1,
             )
             refresh()
         }
     }
 
-    fun markCalibrated() {
-        if (!isCameraReady) return
+    fun armRecognition() {
+        if (!isCameraReady || _uiState.value.sessionId == null || _uiState.value.calibrationState != CalibrationState.Calibrated) return
         _uiState.value = _uiState.value.copy(
-            calibrationState = CalibrationState.Calibrated,
-            calibrationLabel = calibrationLabel(CalibrationState.Calibrated, null),
+            isRecognitionArmed = true,
+            recognitionLabel = recognitionLabel(
+                isCameraReady = isCameraReady,
+                isArmed = true,
+                calibrationState = _uiState.value.calibrationState,
+            ),
+            analysisResetToken = _uiState.value.analysisResetToken + 1,
         )
     }
 
     fun resetCalibration() {
         val nextState = if (isCameraReady) CalibrationState.NeedsCalibration else CalibrationState.NotReady
-        _uiState.value = _uiState.value.copy(
-            calibrationState = nextState,
-            calibrationLabel = calibrationLabel(nextState, null),
-        )
+        disarmRecognition(nextCalibrationState = nextState, clearCalibrationLabel = true)
     }
 
     fun openSessionSetup() {
@@ -338,6 +440,13 @@ class LiveSessionViewModel(
             val calibrationState = if (isCameraReady) CalibrationState.NeedsCalibration else CalibrationState.NotReady
             _uiState.value = _uiState.value.copy(
                 isSessionSetupVisible = false,
+                isRecognitionArmed = false,
+                recognitionLabel = recognitionLabel(
+                    isCameraReady = isCameraReady,
+                    isArmed = false,
+                    calibrationState = calibrationState,
+                ),
+                analysisResetToken = _uiState.value.analysisResetToken + 1,
                 calibrationState = calibrationState,
                 calibrationLabel = calibrationLabel(calibrationState, null),
             )
@@ -362,9 +471,19 @@ class LiveSessionViewModel(
 
                 if (session == null) {
                     val calibrationState = if (isCameraReady) CalibrationState.NeedsCalibration else CalibrationState.NotReady
+                    val currentState = _uiState.value
                     _uiState.value = defaultState().copy(
                         isLoading = false,
                         isSessionSetupVisible = true,
+                        zoomRatio = currentState.zoomRatio,
+                        zoomLabel = currentState.zoomLabel,
+                        isRecognitionArmed = false,
+                        recognitionLabel = recognitionLabel(
+                            isCameraReady = isCameraReady,
+                            isArmed = false,
+                            calibrationState = calibrationState,
+                        ),
+                        analysisResetToken = currentState.analysisResetToken,
                         calibrationState = calibrationState,
                         calibrationLabel = calibrationLabel(calibrationState, null),
                         sessionSetup = _uiState.value.sessionSetup.copy(
@@ -395,8 +514,8 @@ class LiveSessionViewModel(
                         scoreValue = effectiveScoreValue,
                         isX = effectiveIsX,
                         scoreLabel = scoreLabel(effectiveScoreValue, effectiveIsX),
-                        clockHour = clockHour(effectiveXMm, effectiveYMm),
-                        clockLabel = clockLabel(effectiveXMm, effectiveYMm),
+                        clockHour = clockHour(effectiveXMm, effectiveYMm, session.targetFaceCode),
+                        clockLabel = clockLabel(effectiveXMm, effectiveYMm, session.targetFaceCode),
                         xMm = effectiveXMm,
                         yMm = effectiveYMm,
                         xNormalized = mmToNormalized(effectiveXMm, session.targetFaceCode),
@@ -426,7 +545,8 @@ class LiveSessionViewModel(
                 val selectedShotId = preselectedShotId?.takeIf { selectedId -> mappedShots.any { it.id == selectedId } }
                     ?: mappedShots.lastOrNull()?.id
 
-                _uiState.value = _uiState.value.copy(
+                val currentState = _uiState.value
+                _uiState.value = currentState.copy(
                     sessionId = session.id,
                     sessionTitle = session.title,
                     athleteName = activeAthlete?.displayName ?: session.athleteName.orEmpty(),
@@ -436,10 +556,10 @@ class LiveSessionViewModel(
                     totalEnds = endsCount,
                     currentArrowIndex = bundle.arrows.size + 1,
                     arrowsPerEnd = bundle.currentEnd.expectedArrowCount,
-                    zoomLabel = when (session.cameraMode) {
-                        "TELEPHOTO" -> "Telephoto"
-                        "MAIN_ZOOM" -> "Main zoom x2.0"
-                        else -> _uiState.value.zoomLabel
+                    zoomLabel = if (resolvedCameraProfile == null) {
+                        currentState.zoomLabel
+                    } else {
+                        formatZoomLabel(resolvedCameraProfile, currentState.zoomRatio)
                     },
                     shots = mappedShots,
                     markers = mappedMarkers,
@@ -450,9 +570,14 @@ class LiveSessionViewModel(
                     ),
                     calibrationState = calibrationState,
                     calibrationLabel = calibrationLabel(calibrationState, session.calibrationConfidence),
+                    recognitionLabel = recognitionLabel(
+                        isCameraReady = isCameraReady,
+                        isArmed = currentState.isRecognitionArmed,
+                        calibrationState = calibrationState,
+                    ),
                     isLoading = false,
-                    isSessionSetupVisible = _uiState.value.isSessionSetupVisible,
-                    sessionSetup = _uiState.value.sessionSetup.copy(
+                    isSessionSetupVisible = currentState.isSessionSetupVisible,
+                    sessionSetup = currentState.sessionSetup.copy(
                         athleteOptions = athletes.map { athlete ->
                             AthleteChoiceUi(
                                 id = athlete.id,
@@ -603,7 +728,15 @@ class LiveSessionViewModel(
             currentArrowIndex = 1,
             arrowsPerEnd = 6,
             isPaused = false,
-            zoomLabel = "Waiting for camera",
+            zoomRatio = 1f,
+            zoomLabel = WAITING_FOR_CAMERA_LABEL,
+            isRecognitionArmed = false,
+            recognitionLabel = recognitionLabel(
+                isCameraReady = false,
+                isArmed = false,
+                calibrationState = CalibrationState.NotReady,
+            ),
+            analysisResetToken = 0,
             reviewFilter = ReviewFilter.All,
             pendingCount = 0,
             lowConfidenceCount = 0,
@@ -635,6 +768,9 @@ class LiveSessionViewModel(
     companion object {
         private const val ACTIVE_SESSION_ROUTE = "active"
         private const val DEFAULT_TTS_LANGUAGE = "zh-TW"
+        private const val DIGITAL_ZOOM_STEP = 0.25f
+        private const val MAX_REQUESTED_ZOOM_RATIO = 8f
+        private const val WAITING_FOR_CAMERA_LABEL = "Waiting for camera"
     }
 
     private fun calibrationLabel(state: CalibrationState, confidence: Float?): String =
@@ -649,6 +785,66 @@ class LiveSessionViewModel(
                 }
             }
         }
+
+    private fun recognitionLabel(
+        isCameraReady: Boolean,
+        isArmed: Boolean,
+        calibrationState: CalibrationState,
+    ): String =
+        when {
+            !isCameraReady -> getApplication<Application>().getString(R.string.recognition_camera_not_ready)
+            isArmed -> getApplication<Application>().getString(R.string.recognition_active)
+            calibrationState != CalibrationState.Calibrated -> getApplication<Application>().getString(R.string.recognition_waiting_calibration)
+            else -> getApplication<Application>().getString(R.string.recognition_waiting_set)
+        }
+
+    private fun disarmRecognition(
+        nextCalibrationState: CalibrationState,
+        clearCalibrationLabel: Boolean,
+    ) {
+        _uiState.value = _uiState.value.copy(
+            calibrationState = nextCalibrationState,
+            calibrationLabel = if (clearCalibrationLabel) calibrationLabel(nextCalibrationState, null) else _uiState.value.calibrationLabel,
+            isRecognitionArmed = false,
+            recognitionLabel = recognitionLabel(
+                isCameraReady = isCameraReady,
+                isArmed = false,
+                calibrationState = nextCalibrationState,
+            ),
+            analysisResetToken = _uiState.value.analysisResetToken + 1,
+        )
+    }
+
+    private fun formatZoomLabel(
+        profile: ResolvedCameraProfile?,
+        zoomRatio: Float,
+    ): String {
+        val zoomText = zoomRatio.displayZoomRatio()
+        return when (profile?.cameraMode) {
+            "TELEPHOTO" -> "Telephoto $zoomText"
+            "MAIN_ZOOM" -> "Main zoom $zoomText"
+            else -> "Zoom $zoomText"
+        }
+    }
+
+    private fun Float.displayZoomRatio(): String =
+        buildString {
+            append(roundToIntQuarter(this@displayZoomRatio))
+            append('x')
+        }
+
+    private fun roundToIntQuarter(value: Float): String {
+        val quarterSteps = (value * 4f).roundToInt()
+        val wholePart = quarterSteps / 4
+        val remainder = quarterSteps % 4
+        return when (remainder) {
+            0 -> wholePart.toString()
+            1 -> "$wholePart.25"
+            2 -> "$wholePart.5"
+            3 -> "$wholePart.75"
+            else -> value.toString()
+        }
+    }
 
     private fun SelectedShotUi.toAdjustmentDraft(): ShotAdjustmentUi =
         ShotAdjustmentUi(

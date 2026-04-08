@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import com.autoarchery.app.AutoArcheryApplication
 import com.autoarchery.app.data.local.entity.ArrowShotEntity
 import com.autoarchery.app.data.local.entity.TrainingEndEntity
+import com.autoarchery.app.domain.targetFaceLabel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -102,7 +103,7 @@ class MetricsViewModel(
                         "No baseline session yet"
                     },
                     comparisonDetails = buildComparisonDetails(detail.session.totalScore, detail.session.avgScore, comparison?.totalScore, comparison?.avgScore),
-                    sessionSummary = "${detail.session.distanceM}m • ${faceLabel(detail.session.targetFaceCode)} • ${detail.session.totalScore} / ${detail.session.totalArrows}",
+                    sessionSummary = "${detail.session.distanceM}m • ${targetFaceLabel(detail.session.targetFaceCode)} • ${detail.session.totalScore} / ${detail.session.totalArrows}",
                     endSummaries = visibleEnds.map { end ->
                         "End ${end.endIndex} • ${end.subtotalScore} • CTC ${formatValue(end.groupCtcMm)}mm • Accuracy ${formatValue(end.accuracyOffsetMm)}mm"
                     },
@@ -151,12 +152,6 @@ class MetricsViewModel(
         val avgDelta = currentAvgScore - previousAvgScore
         return "Score ${signedInt(scoreDelta)} • Avg ${signedFloat(avgDelta)}"
     }
-
-    private fun faceLabel(faceCode: String): String =
-        when (faceCode) {
-            "FACE_40CM" -> "40 cm"
-            else -> "122 cm"
-        }
 
     private fun formatValue(value: Float?): String =
         if (value == null) "-" else String.format(Locale.US, "%.1f", value)

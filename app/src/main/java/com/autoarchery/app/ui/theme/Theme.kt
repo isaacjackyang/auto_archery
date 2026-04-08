@@ -8,14 +8,42 @@ import androidx.compose.runtime.Composable
 
 private val LightColorScheme = lightColorScheme(
     primary = SessionAccent,
+    onPrimary = SessionAccentOn,
+    primaryContainer = SessionAccentContainer,
+    onPrimaryContainer = SessionAccentOnContainer,
     secondary = EditedBlue,
+    onSecondary = EditedBlueOn,
+    secondaryContainer = EditedBlueContainer,
+    onSecondaryContainer = EditedBlueOnContainer,
     tertiary = PendingOrange,
+    onTertiary = PendingOrangeOn,
+    tertiaryContainer = PendingOrangeContainer,
+    onTertiaryContainer = PendingOrangeOnContainer,
+    surface = LightSurface,
+    onSurface = LightOnSurface,
+    surfaceVariant = LightSurfaceVariant,
+    onSurfaceVariant = LightOnSurfaceVariant,
+    outline = LightOutline,
 )
 
 private val DarkColorScheme = darkColorScheme(
-    primary = SessionAccent,
-    secondary = EditedBlue,
-    tertiary = PendingOrange,
+    primary = DarkSessionAccent,
+    onPrimary = DarkSessionAccentOn,
+    primaryContainer = DarkSessionAccentContainer,
+    onPrimaryContainer = DarkSessionAccentOnContainer,
+    secondary = DarkEditedBlue,
+    onSecondary = DarkEditedBlueOn,
+    secondaryContainer = DarkEditedBlueContainer,
+    onSecondaryContainer = DarkEditedBlueOnContainer,
+    tertiary = DarkPendingOrange,
+    onTertiary = DarkPendingOrangeOn,
+    tertiaryContainer = DarkPendingOrangeContainer,
+    onTertiaryContainer = DarkPendingOrangeOnContainer,
+    surface = DarkSurface,
+    onSurface = DarkOnSurface,
+    surfaceVariant = DarkSurfaceVariant,
+    onSurfaceVariant = DarkOnSurfaceVariant,
+    outline = DarkOutline,
 )
 
 @Composable
@@ -31,4 +59,3 @@ fun AutoArcheryTheme(
         content = content,
     )
 }
-

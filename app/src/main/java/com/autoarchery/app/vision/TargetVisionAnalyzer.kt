@@ -45,24 +45,32 @@ class TargetVisionAnalyzer : ImageAnalysis.Analyzer {
     var knownShotCount: Int = 0
 
     @Volatile
+    var analysisResetToken: Int = 0
+
+    @Volatile
     var onCalibrationDetected: ((TargetCalibrationResult) -> Unit)? = null
 
     @Volatile
     var onShotDetected: ((DetectedShotResult) -> Unit)? = null
 
     private var lastSessionId: String? = null
+    private var lastAnalysisResetToken: Int = 0
     private var lastKnownShotCount: Int = 0
     private var frameCounter: Int = 0
-    private var cooldownFrames: Int = 0
     private var calibration: TargetCalibrationResult? = null
-    private var normalizedReference: FloatArray? = null
+    private var baselineState: BaselineState? = null
     private var pendingCandidate: StableShotCandidate? = null
+    private var awaitingShotCommitFrames: Int = 0
 
     override fun analyze(image: ImageProxy) {
         try {
             val activeSessionId = sessionId ?: return
             if (activeSessionId != lastSessionId) {
                 resetState(activeSessionId)
+            }
+            if (analysisResetToken != lastAnalysisResetToken) {
+                lastAnalysisResetToken = analysisResetToken
+                resetAnalysisState()
             }
 
             frameCounter += 1
@@ -75,37 +83,42 @@ class TargetVisionAnalyzer : ImageAnalysis.Analyzer {
             val detectedCalibration = detectCalibration(lumaFrame, sourceWidth, sourceHeight)
             if (detectedCalibration != null && shouldAcceptCalibration(detectedCalibration)) {
                 calibration = detectedCalibration
-                normalizedReference = null
-                pendingCandidate = null
+                resetBaselineTracking()
+                lastKnownShotCount = knownShotCount
                 onCalibrationDetected?.invoke(detectedCalibration)
             }
 
             val activeCalibration = calibration ?: return
             if (knownShotCount != lastKnownShotCount) {
-                normalizedReference = null
                 pendingCandidate = null
+                awaitingShotCommitFrames = 0
+                if (baselineState?.shotCount != knownShotCount) {
+                    baselineState = null
+                }
                 lastKnownShotCount = knownShotCount
             }
 
             if (isPaused) return
 
             val normalizedFrame = buildNormalizedTarget(lumaFrame, sourceWidth, sourceHeight, activeCalibration)
-            val reference = normalizedReference
-            if (reference == null) {
-                normalizedReference = normalizedFrame
+            val activeBaseline = resolveActiveBaseline(normalizedFrame)
+            if (activeBaseline == null) {
                 return
             }
 
-            if (cooldownFrames > 0) {
-                cooldownFrames -= 1
-                normalizedReference = normalizedFrame
+            if (activeBaseline.shotCount > knownShotCount) {
+                if (awaitingShotCommitFrames > 0) {
+                    awaitingShotCommitFrames -= 1
+                } else {
+                    baselineState = captureBaseline(normalizedFrame, knownShotCount)
+                }
                 return
             }
 
-            val candidate = detectNewShot(reference, normalizedFrame)
+            val candidate = detectIncrementalChange(activeBaseline.normalizedFrame, normalizedFrame)
             if (candidate == null) {
                 pendingCandidate = null
-                normalizedReference = blend(reference, normalizedFrame, alpha = 0.05f)
+                baselineState = activeBaseline.refresh(normalizedFrame, alpha = BASELINE_BLEND_ALPHA)
                 return
             }
 
@@ -132,9 +145,9 @@ class TargetVisionAnalyzer : ImageAnalysis.Analyzer {
                         confidence = stableCandidate.confidence,
                     ),
                 )
-                normalizedReference = normalizedFrame
+                baselineState = captureBaseline(normalizedFrame, knownShotCount + 1)
                 pendingCandidate = null
-                cooldownFrames = 10
+                awaitingShotCommitFrames = SHOT_COMMIT_GRACE_FRAMES
             }
         } finally {
             image.close()
@@ -143,13 +156,42 @@ class TargetVisionAnalyzer : ImageAnalysis.Analyzer {
 
     private fun resetState(activeSessionId: String) {
         lastSessionId = activeSessionId
+        lastAnalysisResetToken = analysisResetToken
+        resetAnalysisState()
+    }
+
+    private fun resetAnalysisState() {
         lastKnownShotCount = knownShotCount
         frameCounter = 0
-        cooldownFrames = 0
         calibration = null
-        normalizedReference = null
+        baselineState = null
         pendingCandidate = null
+        awaitingShotCommitFrames = 0
     }
+
+    private fun resetBaselineTracking() {
+        baselineState = null
+        pendingCandidate = null
+        awaitingShotCommitFrames = 0
+    }
+
+    private fun resolveActiveBaseline(normalizedFrame: FloatArray): BaselineState? {
+        val currentBaseline = baselineState
+        if (currentBaseline == null || currentBaseline.shotCount < knownShotCount) {
+            baselineState = captureBaseline(normalizedFrame, knownShotCount)
+            return null
+        }
+        return currentBaseline
+    }
+
+    private fun captureBaseline(
+        normalizedFrame: FloatArray,
+        shotCount: Int,
+    ): BaselineState = BaselineState(
+        shotCount = shotCount,
+        kind = if (shotCount == 0) BaselineKind.Initial else BaselineKind.Incremental,
+        normalizedFrame = normalizedFrame,
+    )
 
     private fun shouldAcceptCalibration(candidate: TargetCalibrationResult): Boolean {
         val current = calibration ?: return candidate.confidence >= 0.45f
@@ -306,7 +348,7 @@ class TargetVisionAnalyzer : ImageAnalysis.Analyzer {
         return output
     }
 
-    private fun detectNewShot(
+    private fun detectIncrementalChange(
         reference: FloatArray,
         current: FloatArray,
     ): DetectedShotResult? {
@@ -396,15 +438,6 @@ class TargetVisionAnalyzer : ImageAnalysis.Analyzer {
         }
     }
 
-    private fun blend(
-        reference: FloatArray,
-        current: FloatArray,
-        alpha: Float,
-    ): FloatArray =
-        FloatArray(reference.size) { index ->
-            (reference[index] * (1f - alpha)) + (current[index] * alpha)
-        }
-
     private fun bilinearSample(
         luma: FloatArray,
         width: Int,
@@ -457,7 +490,34 @@ class TargetVisionAnalyzer : ImageAnalysis.Analyzer {
         val confidence: Float,
     )
 
+    private data class BaselineState(
+        val shotCount: Int,
+        val kind: BaselineKind,
+        val normalizedFrame: FloatArray,
+    ) {
+        fun refresh(
+            currentFrame: FloatArray,
+            alpha: Float,
+        ): BaselineState = copy(
+            normalizedFrame = FloatArray(normalizedFrame.size) { index ->
+                val effectiveAlpha = when (kind) {
+                    BaselineKind.Initial -> alpha * INITIAL_BASELINE_ADAPT_FACTOR
+                    BaselineKind.Incremental -> alpha
+                }
+                (normalizedFrame[index] * (1f - effectiveAlpha)) + (currentFrame[index] * effectiveAlpha)
+            },
+        )
+    }
+
+    private enum class BaselineKind {
+        Initial,
+        Incremental,
+    }
+
     companion object {
         private const val NORMALIZED_GRID_SIZE = 96
+        private const val BASELINE_BLEND_ALPHA = 0.05f
+        private const val INITIAL_BASELINE_ADAPT_FACTOR = 0.6f
+        private const val SHOT_COMMIT_GRACE_FRAMES = 12
     }
 }

@@ -2,10 +2,10 @@ package com.autoarchery.app.ui.live
 
 import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.Canvas
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -24,15 +24,17 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
@@ -40,6 +42,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -53,16 +56,22 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
-import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Dialog
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.autoarchery.app.R
 import com.autoarchery.app.domain.TargetScoringBandId
+import com.autoarchery.app.domain.normalizationHalfExtentMm
+import com.autoarchery.app.domain.targetFaceSpec
+import com.autoarchery.app.domain.targetSpotCenters
+import com.autoarchery.app.domain.targetScoringBands
+import com.autoarchery.app.domain.visibleSpotRadiusMm
+import com.autoarchery.app.domain.targetFaceSpecs as supportedTargetFaceSpecs
 import com.autoarchery.app.ui.model.CalibrationState
 import com.autoarchery.app.ui.model.LiveSessionUiState
 import com.autoarchery.app.ui.model.ReviewFilter
@@ -103,8 +112,12 @@ fun LiveSessionRoute(
         onReanalyze = viewModel::reanalyzeSelectedShot,
         onConfirmHighConfidence = viewModel::confirmHighConfidenceShots,
         onConfirmEnd = viewModel::confirmCurrentEnd,
-        onMarkCalibrated = viewModel::markCalibrated,
+        onArmRecognition = viewModel::armRecognition,
         onResetCalibration = viewModel::resetCalibration,
+        onIncreaseDigitalZoom = viewModel::increaseDigitalZoom,
+        onDecreaseDigitalZoom = viewModel::decreaseDigitalZoom,
+        onClearCurrentEnd = viewModel::clearCurrentEndShots,
+        onZoomRatioApplied = viewModel::onZoomRatioApplied,
         onCameraReadyChanged = viewModel::onCameraReadyChanged,
         onCameraProfileResolved = viewModel::onCameraProfileResolved,
         onCalibrationDetected = viewModel::onCalibrationDetected,
@@ -140,8 +153,12 @@ private fun LiveSessionScreen(
     onReanalyze: () -> Unit,
     onConfirmHighConfidence: () -> Unit,
     onConfirmEnd: () -> Unit,
-    onMarkCalibrated: () -> Unit,
+    onArmRecognition: () -> Unit,
     onResetCalibration: () -> Unit,
+    onIncreaseDigitalZoom: () -> Unit,
+    onDecreaseDigitalZoom: () -> Unit,
+    onClearCurrentEnd: () -> Unit,
+    onZoomRatioApplied: (Float) -> Unit,
     onCameraReadyChanged: (Boolean) -> Unit,
     onCameraProfileResolved: (com.autoarchery.app.vision.ResolvedCameraProfile) -> Unit,
     onCalibrationDetected: (com.autoarchery.app.vision.TargetCalibrationResult) -> Unit,
@@ -155,6 +172,9 @@ private fun LiveSessionScreen(
     onTrainingGoalChanged: (String) -> Unit,
     onCreateSession: () -> Unit,
 ) {
+    val configuration = LocalConfiguration.current
+    val useDialogForSessionSetup = configuration.screenWidthDp > configuration.screenHeightDp
+
     Scaffold(
         topBar = {
             CompactSessionHeader(
@@ -174,21 +194,25 @@ private fun LiveSessionScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(innerPadding)
-                .padding(horizontal = 12.dp, vertical = 8.dp),
+                .padding(horizontal = 8.dp, vertical = 6.dp),
         ) {
             val wideLayout = maxWidth > maxHeight || maxWidth >= 900.dp
 
             if (wideLayout) {
                 Row(
                     modifier = Modifier.fillMaxSize(),
-                    horizontalArrangement = Arrangement.spacedBy(16.dp),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
                 ) {
                     CameraPanel(
                         uiState = uiState,
                         onTogglePaused = onTogglePaused,
-                        onMarkCalibrated = onMarkCalibrated,
+                        onArmRecognition = onArmRecognition,
                         onResetCalibration = onResetCalibration,
+                        onIncreaseDigitalZoom = onIncreaseDigitalZoom,
+                        onDecreaseDigitalZoom = onDecreaseDigitalZoom,
+                        onClearCurrentEnd = onClearCurrentEnd,
                         onNextRound = onConfirmEnd,
+                        onZoomRatioApplied = onZoomRatioApplied,
                         onCameraReadyChanged = onCameraReadyChanged,
                         onCameraProfileResolved = onCameraProfileResolved,
                         onCalibrationDetected = onCalibrationDetected,
@@ -215,14 +239,18 @@ private fun LiveSessionScreen(
             } else {
                 Column(
                     modifier = Modifier.fillMaxSize(),
-                    verticalArrangement = Arrangement.spacedBy(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
                 ) {
                     CameraPanel(
                         uiState = uiState,
                         onTogglePaused = onTogglePaused,
-                        onMarkCalibrated = onMarkCalibrated,
+                        onArmRecognition = onArmRecognition,
                         onResetCalibration = onResetCalibration,
+                        onIncreaseDigitalZoom = onIncreaseDigitalZoom,
+                        onDecreaseDigitalZoom = onDecreaseDigitalZoom,
+                        onClearCurrentEnd = onClearCurrentEnd,
                         onNextRound = onConfirmEnd,
+                        onZoomRatioApplied = onZoomRatioApplied,
                         onCameraReadyChanged = onCameraReadyChanged,
                         onCameraProfileResolved = onCameraProfileResolved,
                         onCalibrationDetected = onCalibrationDetected,
@@ -266,21 +294,21 @@ private fun LiveSessionScreen(
             BoxWithConstraints(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(20.dp),
+                    .padding(16.dp),
             ) {
                 val useSplitLayout = maxWidth >= 560.dp
 
                 if (useSplitLayout) {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(16.dp),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
                         verticalAlignment = Alignment.Top,
                     ) {
                         Column(
                             modifier = Modifier
                                 .weight(1f)
                                 .verticalScroll(rememberScrollState()),
-                            verticalArrangement = Arrangement.spacedBy(12.dp),
+                            verticalArrangement = Arrangement.spacedBy(10.dp),
                         ) {
                             Text(stringResource(R.string.adjust), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
                             Text("${uiState.selectedShot.label}: ${uiState.selectedShot.scoreLabel}")
@@ -293,7 +321,7 @@ private fun LiveSessionScreen(
                                     formatMm(uiState.adjustmentDraft.yMm),
                                 ),
                             )
-                            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                                 OutlinedButton(onClick = onDismissAdjustSheet) { Text(stringResource(R.string.close)) }
                                 Button(
                                     onClick = onSaveAdjustments,
@@ -306,6 +334,7 @@ private fun LiveSessionScreen(
                         DigitalTargetCard(
                             markers = uiState.markers,
                             selectedShotId = uiState.selectedShot.id,
+                            targetFaceCode = uiState.targetFaceCode,
                             modifier = Modifier
                                 .weight(1f)
                                 .height(320.dp),
@@ -316,7 +345,7 @@ private fun LiveSessionScreen(
                 } else {
                     Column(
                         modifier = Modifier.fillMaxWidth(),
-                        verticalArrangement = Arrangement.spacedBy(12.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp),
                     ) {
                         Text(stringResource(R.string.adjust), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
                         Text("${uiState.selectedShot.label}: ${uiState.selectedShot.scoreLabel}")
@@ -332,13 +361,14 @@ private fun LiveSessionScreen(
                         DigitalTargetCard(
                             markers = uiState.markers,
                             selectedShotId = uiState.selectedShot.id,
+                            targetFaceCode = uiState.targetFaceCode,
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .height(260.dp),
                             adjustmentDraft = uiState.adjustmentDraft,
                             onUpdateAdjustmentPosition = onUpdateAdjustmentPosition,
                         )
-                        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                             OutlinedButton(onClick = onDismissAdjustSheet) { Text(stringResource(R.string.close)) }
                             Button(
                                 onClick = onSaveAdjustments,
@@ -350,21 +380,45 @@ private fun LiveSessionScreen(
                     }
                 }
             }
-            Spacer(modifier = Modifier.height(12.dp))
+            Spacer(modifier = Modifier.height(8.dp))
         }
     }
 
     if (uiState.isSessionSetupVisible) {
-        ModalBottomSheet(onDismissRequest = onDismissSessionSetup) {
-            SessionSetupSheet(
-                setup = uiState.sessionSetup,
-                onAthleteSelected = onSetupAthleteChanged,
-                onDistanceSelected = onSetupDistanceChanged,
-                onArrowsPerEndSelected = onSetupArrowsPerEndChanged,
-                onTargetFaceSelected = onSetupTargetFaceChanged,
-                onTrainingGoalChanged = onTrainingGoalChanged,
-                onCreateSession = onCreateSession,
-            )
+        if (useDialogForSessionSetup) {
+            Dialog(onDismissRequest = onDismissSessionSetup) {
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth(0.94f)
+                        .fillMaxHeight(0.92f),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                ) {
+                    SessionSetupSheet(
+                        setup = uiState.sessionSetup,
+                        onAthleteSelected = onSetupAthleteChanged,
+                        onDistanceSelected = onSetupDistanceChanged,
+                        onArrowsPerEndSelected = onSetupArrowsPerEndChanged,
+                        onTargetFaceSelected = onSetupTargetFaceChanged,
+                        onTrainingGoalChanged = onTrainingGoalChanged,
+                        onCreateSession = onCreateSession,
+                    )
+                }
+            }
+        } else {
+            ModalBottomSheet(
+                onDismissRequest = onDismissSessionSetup,
+                sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+            ) {
+                SessionSetupSheet(
+                    setup = uiState.sessionSetup,
+                    onAthleteSelected = onSetupAthleteChanged,
+                    onDistanceSelected = onSetupDistanceChanged,
+                    onArrowsPerEndSelected = onSetupArrowsPerEndChanged,
+                    onTargetFaceSelected = onSetupTargetFaceChanged,
+                    onTrainingGoalChanged = onTrainingGoalChanged,
+                    onCreateSession = onCreateSession,
+                )
+            }
         }
     }
 }
@@ -385,9 +439,9 @@ private fun CompactSessionHeader(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 12.dp, vertical = 4.dp),
+                .padding(horizontal = 8.dp, vertical = 2.dp),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
         ) {
             Text(
                 text = title,
@@ -399,7 +453,7 @@ private fun CompactSessionHeader(
             )
             Row(
                 modifier = Modifier.horizontalScroll(rememberScrollState()),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 CompactHeaderAction(
@@ -426,15 +480,20 @@ private fun CompactHeaderAction(
     label: String,
     onClick: () -> Unit,
 ) {
-    Text(
-        text = label,
-        style = MaterialTheme.typography.labelMedium,
+    Surface(
+        shape = MaterialTheme.shapes.small,
         color = MaterialTheme.colorScheme.primary,
         modifier = Modifier
             .clip(MaterialTheme.shapes.small)
-            .clickable(onClick = onClick)
-            .padding(horizontal = 4.dp, vertical = 2.dp),
-    )
+            .clickable(onClick = onClick),
+    ) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onPrimary,
+            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+        )
+    }
 }
 
 @OptIn(ExperimentalLayoutApi::class)
@@ -442,9 +501,13 @@ private fun CompactHeaderAction(
 private fun CameraPanel(
     uiState: LiveSessionUiState,
     onTogglePaused: () -> Unit,
-    onMarkCalibrated: () -> Unit,
+    onArmRecognition: () -> Unit,
     onResetCalibration: () -> Unit,
+    onIncreaseDigitalZoom: () -> Unit,
+    onDecreaseDigitalZoom: () -> Unit,
+    onClearCurrentEnd: () -> Unit,
     onNextRound: () -> Unit,
+    onZoomRatioApplied: (Float) -> Unit,
     onCameraReadyChanged: (Boolean) -> Unit,
     onCameraProfileResolved: (com.autoarchery.app.vision.ResolvedCameraProfile) -> Unit,
     onCalibrationDetected: (com.autoarchery.app.vision.TargetCalibrationResult) -> Unit,
@@ -457,8 +520,8 @@ private fun CameraPanel(
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
     ) {
         Column(
-            modifier = (if (isWideLayout) Modifier.fillMaxSize() else Modifier.fillMaxWidth()).padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
+            modifier = (if (isWideLayout) Modifier.fillMaxSize() else Modifier.fillMaxWidth()).padding(12.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             Text(
                 text = if (uiState.athleteName.isBlank()) stringResource(R.string.loading) else stringResource(R.string.current_athlete_label, uiState.athleteName),
@@ -468,7 +531,7 @@ private fun CameraPanel(
             if (isWideLayout) {
                 Row(
                     modifier = Modifier.fillMaxSize(),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
                     Box(
                         modifier = Modifier
@@ -479,8 +542,11 @@ private fun CameraPanel(
                             modifier = Modifier.fillMaxSize(),
                             sessionId = uiState.sessionId,
                             knownShotCount = uiState.shots.size,
-                            isPaused = uiState.isPaused || uiState.sessionId == null,
+                            isPaused = uiState.isPaused || uiState.sessionId == null || !uiState.isRecognitionArmed,
+                            zoomRatio = uiState.zoomRatio,
+                            analysisResetToken = uiState.analysisResetToken,
                             onCameraReadyChanged = onCameraReadyChanged,
+                            onZoomRatioApplied = onZoomRatioApplied,
                             onCameraProfileResolved = onCameraProfileResolved,
                             onCalibrationDetected = onCalibrationDetected,
                             onShotDetected = onShotDetected,
@@ -490,12 +556,15 @@ private fun CameraPanel(
                     CameraControlColumn(
                         uiState = uiState,
                         onTogglePaused = onTogglePaused,
-                        onMarkCalibrated = onMarkCalibrated,
+                        onArmRecognition = onArmRecognition,
                         onResetCalibration = onResetCalibration,
+                        onIncreaseDigitalZoom = onIncreaseDigitalZoom,
+                        onDecreaseDigitalZoom = onDecreaseDigitalZoom,
+                        onClearCurrentEnd = onClearCurrentEnd,
                         onNextRound = onNextRound,
                         isWideLayout = true,
                         modifier = Modifier
-                            .width(220.dp)
+                            .width(208.dp)
                             .fillMaxHeight(),
                     )
                 }
@@ -503,14 +572,17 @@ private fun CameraPanel(
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(320.dp),
+                        .height(304.dp),
                 ) {
                     CameraPreviewSurface(
                         modifier = Modifier.fillMaxSize(),
                         sessionId = uiState.sessionId,
                         knownShotCount = uiState.shots.size,
-                        isPaused = uiState.isPaused || uiState.sessionId == null,
+                        isPaused = uiState.isPaused || uiState.sessionId == null || !uiState.isRecognitionArmed,
+                        zoomRatio = uiState.zoomRatio,
+                        analysisResetToken = uiState.analysisResetToken,
                         onCameraReadyChanged = onCameraReadyChanged,
+                        onZoomRatioApplied = onZoomRatioApplied,
                         onCameraProfileResolved = onCameraProfileResolved,
                         onCalibrationDetected = onCalibrationDetected,
                         onShotDetected = onShotDetected,
@@ -520,8 +592,11 @@ private fun CameraPanel(
                 CameraControlColumn(
                     uiState = uiState,
                     onTogglePaused = onTogglePaused,
-                    onMarkCalibrated = onMarkCalibrated,
+                    onArmRecognition = onArmRecognition,
                     onResetCalibration = onResetCalibration,
+                    onIncreaseDigitalZoom = onIncreaseDigitalZoom,
+                    onDecreaseDigitalZoom = onDecreaseDigitalZoom,
+                    onClearCurrentEnd = onClearCurrentEnd,
                     onNextRound = onNextRound,
                     isWideLayout = false,
                 )
@@ -535,125 +610,188 @@ private fun CameraPanel(
 private fun CameraControlColumn(
     uiState: LiveSessionUiState,
     onTogglePaused: () -> Unit,
-    onMarkCalibrated: () -> Unit,
+    onArmRecognition: () -> Unit,
     onResetCalibration: () -> Unit,
+    onIncreaseDigitalZoom: () -> Unit,
+    onDecreaseDigitalZoom: () -> Unit,
+    onClearCurrentEnd: () -> Unit,
     onNextRound: () -> Unit,
     isWideLayout: Boolean,
     modifier: Modifier = Modifier,
 ) {
+    val canSetRecognition = uiState.sessionId != null &&
+        uiState.calibrationState == CalibrationState.Calibrated &&
+        !uiState.isRecognitionArmed
+    val canAdjustZoom = uiState.sessionId != null && uiState.calibrationState != CalibrationState.NotReady
+    val canClearCurrentEnd = uiState.sessionId != null && uiState.shots.isNotEmpty()
+
     if (isWideLayout) {
         Column(
             modifier = modifier
-                .padding(start = 24.dp)
+                .padding(start = 16.dp)
                 .verticalScroll(rememberScrollState()),
-            verticalArrangement = Arrangement.Center,
+            verticalArrangement = Arrangement.spacedBy(6.dp, Alignment.Top),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             Column(
                 modifier = Modifier.fillMaxWidth(),
-                verticalArrangement = Arrangement.spacedBy(10.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp),
             ) {
-                AssistChip(
+                CameraStatusStrip(
+                    uiState = uiState,
                     modifier = Modifier.fillMaxWidth(),
-                    onClick = {},
-                    label = { Text(uiState.zoomLabel, maxLines = 1, overflow = TextOverflow.Ellipsis) },
                 )
-                Row(
+                CameraActionStrip(
+                    canAdjustZoom = canAdjustZoom,
+                    canClearCurrentEnd = canClearCurrentEnd,
+                    canSetRecognition = canSetRecognition,
+                    hasSession = uiState.sessionId != null,
+                    onIncreaseDigitalZoom = onIncreaseDigitalZoom,
+                    onDecreaseDigitalZoom = onDecreaseDigitalZoom,
+                    onClearCurrentEnd = onClearCurrentEnd,
+                    onNextRound = onNextRound,
+                    onArmRecognition = onArmRecognition,
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    AssistChip(
-                        modifier = Modifier.weight(1f),
-                        onClick = {},
-                        label = { Text(uiState.currentEndLabel, maxLines = 1, overflow = TextOverflow.Ellipsis) },
-                    )
-                    AssistChip(
-                        modifier = Modifier.weight(1f),
-                        onClick = {},
-                        label = { Text(uiState.currentArrowLabel, maxLines = 1, overflow = TextOverflow.Ellipsis) },
-                    )
-                }
-                AssistChip(
-                    modifier = Modifier.fillMaxWidth(),
-                    onClick = {},
-                    label = {
-                        Text(
-                            "${stringResource(R.string.calibration_status)}: ${uiState.calibrationLabel}",
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                        )
-                    },
                 )
-                AssistChip(
-                    modifier = Modifier.fillMaxWidth(),
-                    onClick = onTogglePaused,
-                    label = {
-                        Text(
-                            if (uiState.isPaused) stringResource(R.string.resume_auto) else stringResource(R.string.pause_auto),
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                        )
-                    },
-                )
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    Button(
-                        onClick = onMarkCalibrated,
-                        enabled = uiState.calibrationState != CalibrationState.Calibrated,
-                        modifier = Modifier.weight(1f),
-                    ) {
-                        Text(stringResource(R.string.calibrate), maxLines = 1)
-                    }
-                    OutlinedButton(
-                        onClick = onResetCalibration,
-                        modifier = Modifier.weight(1f),
-                    ) {
-                        Text(stringResource(R.string.recalibrate), maxLines = 1)
-                    }
-                }
-                Button(
-                    onClick = onNextRound,
-                    enabled = uiState.sessionId != null,
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Text(stringResource(R.string.next_round), maxLines = 1)
-                }
             }
+            DebugControlSection(
+                uiState = uiState,
+                onTogglePaused = onTogglePaused,
+                onResetCalibration = onResetCalibration,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 4.dp),
+            )
         }
     } else {
         Column(
             modifier = modifier.verticalScroll(rememberScrollState()),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp),
         ) {
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                AssistChip(onClick = {}, label = { Text(uiState.zoomLabel) })
-                AssistChip(onClick = {}, label = { Text(uiState.currentEndLabel) })
-                AssistChip(onClick = {}, label = { Text(uiState.currentArrowLabel) })
-                AssistChip(onClick = {}, label = { Text("${stringResource(R.string.calibration_status)}: ${uiState.calibrationLabel}") })
-                AssistChip(
-                    onClick = onTogglePaused,
-                    label = { Text(if (uiState.isPaused) stringResource(R.string.resume_auto) else stringResource(R.string.pause_auto)) },
-                )
-            }
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Button(
-                    onClick = onMarkCalibrated,
-                    enabled = uiState.calibrationState != CalibrationState.Calibrated,
-                ) {
-                    Text(stringResource(R.string.calibrate))
-                }
-                OutlinedButton(onClick = onResetCalibration) {
-                    Text(stringResource(R.string.recalibrate))
-                }
-                Button(
-                    onClick = onNextRound,
-                    enabled = uiState.sessionId != null,
-                ) {
-                    Text(stringResource(R.string.next_round))
-                }
-            }
+            CameraStatusStrip(
+                uiState = uiState,
+                modifier = Modifier.fillMaxWidth(),
+            )
+            CameraActionStrip(
+                canAdjustZoom = canAdjustZoom,
+                canClearCurrentEnd = canClearCurrentEnd,
+                canSetRecognition = canSetRecognition,
+                hasSession = uiState.sessionId != null,
+                onIncreaseDigitalZoom = onIncreaseDigitalZoom,
+                onDecreaseDigitalZoom = onDecreaseDigitalZoom,
+                onClearCurrentEnd = onClearCurrentEnd,
+                onNextRound = onNextRound,
+                onArmRecognition = onArmRecognition,
+                modifier = Modifier.fillMaxWidth(),
+            )
+            DebugControlSection(
+                uiState = uiState,
+                onTogglePaused = onTogglePaused,
+                onResetCalibration = onResetCalibration,
+            )
+        }
+    }
+}
+
+@Composable
+private fun CameraActionStrip(
+    canAdjustZoom: Boolean,
+    canClearCurrentEnd: Boolean,
+    canSetRecognition: Boolean,
+    hasSession: Boolean,
+    onIncreaseDigitalZoom: () -> Unit,
+    onDecreaseDigitalZoom: () -> Unit,
+    onClearCurrentEnd: () -> Unit,
+    onNextRound: () -> Unit,
+    onArmRecognition: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Row(
+        modifier = modifier.horizontalScroll(rememberScrollState()),
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        CompactFilledActionButton(
+            label = stringResource(R.string.zoom_in_quarter),
+            enabled = canAdjustZoom,
+            onClick = onIncreaseDigitalZoom,
+        )
+        CompactOutlinedActionButton(
+            label = stringResource(R.string.zoom_out_quarter),
+            enabled = canAdjustZoom,
+            onClick = onDecreaseDigitalZoom,
+        )
+        CompactOutlinedActionButton(
+            label = stringResource(R.string.clear_current_end),
+            enabled = canClearCurrentEnd,
+            onClick = onClearCurrentEnd,
+        )
+        CompactOutlinedActionButton(
+            label = stringResource(R.string.next_round),
+            enabled = hasSession,
+            onClick = onNextRound,
+        )
+        CompactFilledActionButton(
+            label = stringResource(R.string.set_detection),
+            enabled = canSetRecognition,
+            onClick = onArmRecognition,
+        )
+    }
+}
+
+@Composable
+private fun CameraStatusStrip(
+    uiState: LiveSessionUiState,
+    modifier: Modifier = Modifier,
+) {
+    Row(
+        modifier = modifier.horizontalScroll(rememberScrollState()),
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        CompactPillStat(uiState.zoomLabel)
+        CompactPillStat(uiState.currentEndLabel)
+        CompactPillStat(uiState.currentArrowLabel)
+        CompactPillStat("${stringResource(R.string.recognition_status)}: ${uiState.recognitionLabel}")
+    }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun DebugControlSection(
+    uiState: LiveSessionUiState,
+    onTogglePaused: () -> Unit,
+    onResetCalibration: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Card(
+        modifier = modifier,
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f)),
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .horizontalScroll(rememberScrollState())
+                .padding(horizontal = 8.dp, vertical = 6.dp),
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                text = stringResource(R.string.debug_tools),
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = FontWeight.SemiBold,
+            )
+            CompactPillStat("${stringResource(R.string.calibration_status)}: ${uiState.calibrationLabel}")
+            CompactFilledActionButton(
+                label = if (uiState.isPaused) stringResource(R.string.resume_auto) else stringResource(R.string.pause_auto),
+                enabled = true,
+                onClick = onTogglePaused,
+            )
+            CompactOutlinedActionButton(
+                label = stringResource(R.string.recalibrate),
+                enabled = true,
+                onClick = onResetCalibration,
+            )
         }
     }
 }
@@ -705,19 +843,20 @@ private fun TargetReviewPanel(
     Column(
         modifier = (if (isWideLayout) modifier.fillMaxHeight() else modifier)
             .verticalScroll(rememberScrollState()),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)) {
             Column(
-                modifier = Modifier.padding(if (isWideLayout) 12.dp else 16.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp),
+                modifier = Modifier.padding(if (isWideLayout) 10.dp else 12.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {
                 DigitalTargetCard(
                     markers = uiState.filteredMarkers,
                     selectedShotId = uiState.selectedShot?.id,
+                    targetFaceCode = uiState.targetFaceCode,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(if (isWideLayout) 200.dp else 240.dp),
+                        .height(if (isWideLayout) 192.dp else 224.dp),
                     scoreLine = currentEndScoreLine(
                         shots = uiState.shots,
                         arrowsPerEnd = uiState.arrowsPerEnd,
@@ -765,14 +904,14 @@ private fun TargetReviewPanel(
             modifier = Modifier.fillMaxWidth(),
             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
         ) {
-            Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Text(stringResource(R.string.shot_list), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                 if (uiState.filteredShots.isEmpty()) {
                     Text(stringResource(R.string.loading))
                 } else {
                     Column(
                         modifier = Modifier.fillMaxWidth(),
-                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp),
                     ) {
                         uiState.filteredShots.forEach { shot ->
                             ShotRow(
@@ -788,7 +927,7 @@ private fun TargetReviewPanel(
 
         uiState.selectedShot?.let { selectedShot ->
             Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)) {
-                Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Text(selectedShot.label, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                     Text(selectedShot.scoreLabel)
                     Text(selectedShot.detailLabel)
@@ -803,7 +942,7 @@ private fun TargetReviewPanel(
 
         Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)) {
             FlowRow(
-                modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
+                modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
                 verticalArrangement = Arrangement.spacedBy(6.dp),
             ) {
@@ -832,7 +971,7 @@ private fun TargetReviewPanel(
 
         uiState.endSummary?.let { endSummary ->
             Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)) {
-                Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     Text(stringResource(R.string.end_summary), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                     Text(endSummary.summaryLine)
                     Text(endSummary.detailLine)
@@ -847,6 +986,7 @@ private fun TargetReviewPanel(
 private fun DigitalTargetCard(
     markers: List<ShotMarkerUi>,
     selectedShotId: String?,
+    targetFaceCode: String,
     modifier: Modifier = Modifier,
     scoreLine: String? = null,
     scoreValues: List<String> = emptyList(),
@@ -858,15 +998,21 @@ private fun DigitalTargetCard(
         Modifier
             .fillMaxSize()
             .pointerInput(adjustmentDraft.id) {
+                var currentX = adjustmentDraft.xNormalized
+                var currentY = adjustmentDraft.yNormalized
                 detectDragGestures(
-                    onDragStart = { offset ->
-                        val normalized = offset.toNormalized(size.width.toFloat(), size.height.toFloat())
-                        onUpdateAdjustmentPosition(normalized.x, normalized.y)
+                    onDragStart = {
+                        currentX = adjustmentDraft.xNormalized
+                        currentY = adjustmentDraft.yNormalized
                     },
-                    onDrag = { change, _ ->
+                    onDrag = { change, dragAmount ->
                         change.consume()
-                        val normalized = change.position.toNormalized(size.width.toFloat(), size.height.toFloat())
-                        onUpdateAdjustmentPosition(normalized.x, normalized.y)
+                        val normalizedDelta = dragAmount.toNormalizedDelta(
+                            scoringRadiusPx = targetLayout(size.width.toFloat(), size.height.toFloat()).scoringRadiusPx,
+                        )
+                        currentX = (currentX + normalizedDelta.x).coerceIn(-1f, 1f)
+                        currentY = (currentY + normalizedDelta.y).coerceIn(-1f, 1f)
+                        onUpdateAdjustmentPosition(currentX, currentY)
                     },
                 )
             }
@@ -876,12 +1022,12 @@ private fun DigitalTargetCard(
 
     Surface(modifier = modifier, tonalElevation = 2.dp) {
         Box(modifier = Modifier.fillMaxSize()) {
-            Image(
-                painter = painterResource(id = R.drawable.target_face_classic),
-                contentDescription = null,
-                contentScale = ContentScale.Fit,
-                modifier = Modifier.fillMaxSize(),
-            )
+            Canvas(modifier = Modifier.fillMaxSize()) {
+                drawTargetFace(
+                    targetFaceCode = targetFaceCode,
+                    layout = targetLayout(size.width, size.height),
+                )
+            }
             Canvas(modifier = canvasModifier) {
                 val targetLayout = targetLayout(size.width, size.height)
                 val displayedMarkers = markers.map { marker ->
@@ -901,7 +1047,11 @@ private fun DigitalTargetCard(
                         y = targetLayout.center.y + (marker.yNormalized * targetLayout.scoringRadiusPx),
                     )
                     val isSelected = marker.id == selectedShotId
-                    val backgroundColor = targetFaceBackgroundColor(marker.xNormalized, marker.yNormalized)
+                    val backgroundColor = targetFaceBackgroundColor(
+                        targetFaceCode = targetFaceCode,
+                        xNormalized = marker.xNormalized,
+                        yNormalized = marker.yNormalized,
+                    )
                     val contrastColor = contrastColorFor(backgroundColor)
                     drawCircle(
                         color = contrastColor,
@@ -1007,25 +1157,30 @@ private const val TARGET_VIEWBOX_SIZE = 612f
 private const val TARGET_OUTER_RADIUS = 280f
 private const val TARGET_OUTER_RADIUS_FRACTION = TARGET_OUTER_RADIUS / TARGET_VIEWBOX_SIZE
 
-private fun Offset.toNormalized(width: Float, height: Float): Offset {
-    val targetLayout = targetLayout(width, height)
-    val normalizedX = ((x - targetLayout.center.x) / targetLayout.scoringRadiusPx).coerceIn(-1f, 1f)
-    val normalizedY = ((y - targetLayout.center.y) / targetLayout.scoringRadiusPx).coerceIn(-1f, 1f)
-    return Offset(normalizedX, normalizedY)
-}
+private fun Offset.toNormalizedDelta(scoringRadiusPx: Float): Offset =
+    Offset(
+        x = x / scoringRadiusPx,
+        y = y / scoringRadiusPx,
+    )
 
 private fun targetFaceBackgroundColor(
+    targetFaceCode: String,
     xNormalized: Float,
     yNormalized: Float,
 ): Color {
-    val radius = kotlin.math.sqrt((xNormalized * xNormalized) + (yNormalized * yNormalized))
-    return when {
-        radius <= 0.2f -> targetBandColor(TargetScoringBandId.Score10)
-        radius <= 0.4f -> targetBandColor(TargetScoringBandId.Score8)
-        radius <= 0.6f -> targetBandColor(TargetScoringBandId.Score6)
-        radius <= 0.8f -> targetBandColor(TargetScoringBandId.Score4)
-        else -> targetBandColor(TargetScoringBandId.Score2)
-    }
+    val halfExtentMm = normalizationHalfExtentMm(targetFaceCode)
+    val xMm = xNormalized * halfExtentMm
+    val yMm = yNormalized * halfExtentMm
+    val nearestSpot = targetSpotCenters(targetFaceCode).minByOrNull { spot ->
+        kotlin.math.sqrt(((xMm - spot.xMm) * (xMm - spot.xMm)) + ((yMm - spot.yMm) * (yMm - spot.yMm)))
+    } ?: return TARGET_PAPER_COLOR
+    val relativeX = xMm - nearestSpot.xMm
+    val relativeY = yMm - nearestSpot.yMm
+    val radius = kotlin.math.sqrt((relativeX * relativeX) + (relativeY * relativeY))
+    val radiusInRings = radius / targetFaceSpec(targetFaceCode).ringWidthMm
+    val band = targetScoringBands(targetFaceCode)
+        .firstOrNull { scoringBand -> radiusInRings <= scoringBand.outerRadiusRings }
+    return band?.let { targetBandColor(it.id) } ?: TARGET_PAPER_COLOR
 }
 
 private fun contrastColorFor(backgroundColor: Color): Color =
@@ -1094,7 +1249,7 @@ private fun CompactPillStat(
             fontWeight = FontWeight.Medium,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
+            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
         )
     }
 }
@@ -1108,11 +1263,22 @@ private fun CompactOutlinedActionButton(
     OutlinedButton(
         onClick = onClick,
         enabled = enabled,
+        colors = ButtonDefaults.outlinedButtonColors(
+            containerColor = MaterialTheme.colorScheme.secondaryContainer,
+            contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
+            disabledContainerColor = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.4f),
+            disabledContentColor = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.55f),
+        ),
+        border = BorderStroke(
+            width = 1.dp,
+            color = MaterialTheme.colorScheme.outline.copy(alpha = if (enabled) 0.85f else 0.35f),
+        ),
         contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 10.dp, vertical = 4.dp),
     ) {
         Text(
             text = label,
             style = MaterialTheme.typography.labelSmall,
+            fontWeight = FontWeight.SemiBold,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
         )
@@ -1128,11 +1294,18 @@ private fun CompactFilledActionButton(
     Button(
         onClick = onClick,
         enabled = enabled,
+        colors = ButtonDefaults.buttonColors(
+            containerColor = MaterialTheme.colorScheme.primary,
+            contentColor = MaterialTheme.colorScheme.onPrimary,
+            disabledContainerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.4f),
+            disabledContentColor = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.7f),
+        ),
         contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 10.dp, vertical = 4.dp),
     ) {
         Text(
             text = label,
             style = MaterialTheme.typography.labelSmall,
+            fontWeight = FontWeight.SemiBold,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
         )
@@ -1159,6 +1332,52 @@ private fun targetBandColor(id: TargetScoringBandId): Color =
         -> Color(0xFFF4F4F1)
         TargetScoringBandId.Miss -> Color(0xFF9AA0A6)
     }
+
+private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawTargetFace(
+    targetFaceCode: String,
+    layout: TargetLayout,
+) {
+    val spec = targetFaceSpec(targetFaceCode)
+    val halfExtentMm = normalizationHalfExtentMm(targetFaceCode)
+    val visibleSpotRadiusMm = visibleSpotRadiusMm(targetFaceCode)
+    drawRect(color = TARGET_PAPER_COLOR)
+    targetSpotCenters(targetFaceCode).forEach { spotCenter ->
+        val center = Offset(
+            x = layout.center.x + ((spotCenter.xMm / halfExtentMm) * layout.scoringRadiusPx),
+            y = layout.center.y + ((spotCenter.yMm / halfExtentMm) * layout.scoringRadiusPx),
+        )
+        drawCircle(
+            color = TARGET_PAPER_COLOR,
+            radius = layout.scoringRadiusPx * (visibleSpotRadiusMm / halfExtentMm),
+            center = center,
+        )
+        targetScoringBands(targetFaceCode)
+            .sortedByDescending { it.outerRadiusRings }
+            .forEach { band ->
+                val radiusPx = layout.scoringRadiusPx * ((band.outerRadiusRings * spec.ringWidthMm) / halfExtentMm)
+                drawCircle(
+                    color = targetBandColor(band.id),
+                    radius = radiusPx,
+                    center = center,
+                )
+            }
+        for (ringIndex in spec.visibleRingCount downTo 1) {
+            val radiusPx = layout.scoringRadiusPx * (((ringIndex.toFloat() * spec.ringWidthMm)) / halfExtentMm)
+            drawCircle(
+                color = TARGET_RING_STROKE_COLOR,
+                radius = radiusPx,
+                center = center,
+                style = androidx.compose.ui.graphics.drawscope.Stroke(width = 1.4f),
+            )
+        }
+        drawCircle(
+            color = TARGET_RING_STROKE_COLOR,
+            radius = layout.scoringRadiusPx * ((0.5f * spec.ringWidthMm) / halfExtentMm),
+            center = center,
+            style = androidx.compose.ui.graphics.drawscope.Stroke(width = 1.2f),
+        )
+    }
+}
 
 @Composable
 private fun ShotRow(
@@ -1197,11 +1416,21 @@ private fun SessionSetupSheet(
     onTrainingGoalChanged: (String) -> Unit,
     onCreateSession: () -> Unit,
 ) {
+    val setupChipColors = FilterChipDefaults.filterChipColors(
+        containerColor = MaterialTheme.colorScheme.surfaceVariant,
+        labelColor = MaterialTheme.colorScheme.onSurfaceVariant,
+        selectedContainerColor = MaterialTheme.colorScheme.primary,
+        selectedLabelColor = MaterialTheme.colorScheme.onPrimary,
+        disabledContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f),
+        disabledLabelColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.55f),
+    )
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(20.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp),
+            .verticalScroll(rememberScrollState())
+            .navigationBarsPadding()
+            .padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         Text(stringResource(R.string.session_setup_title), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
         Text(stringResource(R.string.select_athlete), fontWeight = FontWeight.SemiBold)
@@ -1210,6 +1439,7 @@ private fun SessionSetupSheet(
                 FilterChip(
                     selected = setup.selectedAthleteId == athlete.id,
                     onClick = { onAthleteSelected(athlete.id) },
+                    colors = setupChipColors,
                     label = { Text(athlete.name) },
                 )
             }
@@ -1220,6 +1450,7 @@ private fun SessionSetupSheet(
                 FilterChip(
                     selected = setup.selectedDistanceM == distance,
                     onClick = { onDistanceSelected(distance) },
+                    colors = setupChipColors,
                     label = { Text("${distance}m") },
                 )
             }
@@ -1230,16 +1461,18 @@ private fun SessionSetupSheet(
                 FilterChip(
                     selected = setup.selectedArrowsPerEnd == count,
                     onClick = { onArrowsPerEndSelected(count) },
+                    colors = setupChipColors,
                     label = { Text(count.toString()) },
                 )
             }
         }
         Text(stringResource(R.string.target_face), fontWeight = FontWeight.SemiBold)
         FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            listOf("FACE_122CM" to stringResource(R.string.face_122cm), "FACE_40CM" to stringResource(R.string.face_40cm)).forEach { (value, label) ->
+            targetFaceOptions().forEach { (value, label) ->
                 FilterChip(
                     selected = setup.selectedTargetFace == value,
                     onClick = { onTargetFaceSelected(value) },
+                    colors = setupChipColors,
                     label = { Text(label) },
                 )
             }
@@ -1258,3 +1491,22 @@ private fun SessionSetupSheet(
 }
 
 private fun formatMm(value: Float): String = String.format(Locale.US, "%.1f", value)
+
+@Composable
+private fun targetFaceOptions(): List<Pair<String, String>> =
+    supportedTargetFaceSpecs().map { spec ->
+        spec.code to when (spec.code) {
+            "FACE_122CM" -> stringResource(R.string.face_122cm)
+            "FACE_80CM_10_RING" -> stringResource(R.string.face_80cm_10_ring)
+            "FACE_80CM_5_RING" -> stringResource(R.string.face_80cm_inner_5)
+            "FACE_60CM_6_RING" -> stringResource(R.string.face_60cm_inner_6)
+            "FACE_40CM" -> stringResource(R.string.face_40cm)
+            "FACE_40CM_6_RING" -> stringResource(R.string.face_40cm_inner_6)
+            "FACE_20CM_5_RING" -> stringResource(R.string.face_20cm_inner_5)
+            "FACE_20CM_5_RING_TRIPLE" -> stringResource(R.string.face_20cm_inner_5_triple)
+            else -> spec.label
+        }
+    }
+
+private val TARGET_PAPER_COLOR = Color(0xFFF7F3E8)
+private val TARGET_RING_STROKE_COLOR = Color(0xFF2F2A24)

@@ -7,6 +7,7 @@ import android.hardware.camera2.CameraCharacteristics
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.camera.camera2.interop.Camera2CameraInfo
+import androidx.camera.core.Camera
 import androidx.camera.core.CameraInfo
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.ImageAnalysis
@@ -21,6 +22,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -48,7 +50,10 @@ fun CameraPreviewSurface(
     sessionId: String?,
     knownShotCount: Int,
     isPaused: Boolean,
+    zoomRatio: Float,
+    analysisResetToken: Int,
     onCameraReadyChanged: (Boolean) -> Unit = {},
+    onZoomRatioApplied: (Float) -> Unit = {},
     onCameraProfileResolved: (ResolvedCameraProfile) -> Unit = {},
     onCalibrationDetected: (TargetCalibrationResult) -> Unit = {},
     onShotDetected: (DetectedShotResult) -> Unit = {},
@@ -66,6 +71,7 @@ fun CameraPreviewSurface(
     }
     val analyzer = remember { TargetVisionAnalyzer() }
     val latestOnCameraReadyChanged by rememberUpdatedState(onCameraReadyChanged)
+    val latestOnZoomRatioApplied by rememberUpdatedState(onZoomRatioApplied)
     val latestOnCameraProfileResolved by rememberUpdatedState(onCameraProfileResolved)
     val latestOnCalibrationDetected by rememberUpdatedState(onCalibrationDetected)
     val latestOnShotDetected by rememberUpdatedState(onShotDetected)
@@ -74,16 +80,26 @@ fun CameraPreviewSurface(
         analyzer.sessionId = sessionId
         analyzer.knownShotCount = knownShotCount
         analyzer.isPaused = isPaused
+        analyzer.analysisResetToken = analysisResetToken
         analyzer.onCalibrationDetected = latestOnCalibrationDetected
         analyzer.onShotDetected = latestOnShotDetected
     }
 
     var hasPermission by remember { mutableStateOf(context.hasCameraPermission()) }
     var bindError by remember { mutableStateOf<String?>(null) }
+    var boundCamera by remember { mutableStateOf<Camera?>(null) }
     val cameraPermissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission(),
     ) { granted ->
         hasPermission = granted
+    }
+
+    LaunchedEffect(boundCamera, zoomRatio) {
+        val camera = boundCamera ?: return@LaunchedEffect
+        val maxZoom = camera.cameraInfo.zoomState.value?.maxZoomRatio ?: zoomRatio
+        val appliedZoomRatio = zoomRatio.coerceIn(1f, maxZoom)
+        camera.cameraControl.setZoomRatio(appliedZoomRatio)
+        latestOnZoomRatioApplied(appliedZoomRatio)
     }
 
     DisposableEffect(hasPermission, lifecycleOwner) {
@@ -118,17 +134,12 @@ fun CameraPreviewSurface(
                                     preview,
                                     analysis,
                                 )
-                                if (profile.cameraMode == "MAIN_ZOOM") {
-                                    val maxZoom = camera.cameraInfo.zoomState.value?.maxZoomRatio ?: 1f
-                                    val zoomRatio = minOf(profile.zoomRatio, maxZoom)
-                                    if (zoomRatio > 1f) {
-                                        camera.cameraControl.setZoomRatio(zoomRatio)
-                                    }
-                                }
+                                boundCamera = camera
                                 bindError = null
                                 latestOnCameraProfileResolved(profile)
                                 latestOnCameraReadyChanged(true)
                             }.onFailure { throwable ->
+                                boundCamera = null
                                 bindError = throwable.message
                                 latestOnCameraReadyChanged(false)
                             }
@@ -136,15 +147,18 @@ fun CameraPreviewSurface(
                         ContextCompat.getMainExecutor(context),
                     )
                 }.onFailure { throwable ->
+                    boundCamera = null
                     bindError = throwable.message
                     latestOnCameraReadyChanged(false)
                 }
             }
         } else {
+            boundCamera = null
             latestOnCameraReadyChanged(false)
         }
         onDispose {
             isDisposed = true
+            boundCamera = null
             latestOnCameraReadyChanged(false)
             cameraExecutor.shutdown()
         }

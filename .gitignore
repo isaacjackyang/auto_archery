@@ -1,8 +1,56 @@
+# Android Studio / IntelliJ
+.idea/
+*.iml
+
+# Gradle / Kotlin build state
 .gradle/
 .kotlin/
-.idea/
 build/
+*/build/
+out/
+
+# Local machine config
 local.properties
+
+# Android Studio generated captures
 captures/
-*.iml
-app/build/
+
+# Native / NDK build output
+.cxx/
+.externalNativeBuild/
+
+# Packaged app artifacts
+*.apk
+*.aab
+*.ap_
+*.aar
+
+# Signing files and local secrets
+*.jks
+*.keystore
+keystore.properties
+google-services.json
+firebase-service-account.json
+
+# Logs and crash dumps
+*.log
+*.stacktrace
+hs_err_pid*
+replay_pid*
+
+# OS junk
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Temp / backup files
+*.tmp
+*.temp
+*.orig
+*.rej
+*~
+
+# Local helper scripts
+commit_github.cmd
+
+# Keep tracked Room schemas under app/schemas/

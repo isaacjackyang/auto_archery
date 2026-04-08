@@ -6,6 +6,7 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.autoarchery.app.AutoArcheryApplication
 import com.autoarchery.app.R
+import com.autoarchery.app.domain.targetFaceLabel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -170,7 +171,7 @@ class SettingsViewModel(
                         TrainingRecordUi(
                             id = session.id,
                             title = session.title,
-                            subtitle = "$dateText • ${session.distanceM}m • ${faceLabel(session.targetFaceCode)}",
+                            subtitle = "$dateText • ${session.distanceM}m • ${targetFaceLabel(session.targetFaceCode)}",
                             scoreSummary = if (session.totalArrows > 0) {
                                 "Score ${session.totalScore} / ${session.totalArrows}"
                             } else {
@@ -202,9 +203,4 @@ class SettingsViewModel(
         }
     }
 
-    private fun faceLabel(faceCode: String): String =
-        when (faceCode) {
-            "FACE_40CM" -> "40 cm"
-            else -> "122 cm"
-        }
 }

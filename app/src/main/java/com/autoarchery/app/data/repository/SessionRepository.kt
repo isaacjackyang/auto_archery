@@ -18,7 +18,8 @@ import com.autoarchery.app.domain.clockHour
 import com.autoarchery.app.domain.distance
 import com.autoarchery.app.domain.mmToNormalized as domainMmToNormalized
 import com.autoarchery.app.domain.normalizedToMm as domainNormalizedToMm
-import com.autoarchery.app.domain.outerRadiusMm as domainOuterRadiusMm
+import com.autoarchery.app.domain.relativeToSpotCenter
+import com.autoarchery.app.domain.visibleSpotRadiusMm as domainVisibleSpotRadiusMm
 import kotlin.math.abs
 import kotlin.math.atan2
 import kotlin.math.pow
@@ -201,6 +202,7 @@ class SessionRepository(
             targetFaceCode = bundle.session.targetFaceCode,
             arrowDiameterMm = bundle.session.arrowDiameterMm,
         )
+        val relativeToSpot = relativeToSpotCenter(xMm, yMm, bundle.session.targetFaceCode)
         val shot = ArrowShotEntity(
             id = shotId,
             endId = bundle.currentEnd.id,
@@ -208,9 +210,9 @@ class SessionRepository(
             detectedAt = now,
             scoreValue = score.scoreValue,
             isX = score.isX,
-            clockHour = clockHour(xMm, yMm),
-            angleDeg = angleDeg(xMm, yMm),
-            radiusMm = distance(xMm, yMm),
+            clockHour = clockHour(xMm, yMm, bundle.session.targetFaceCode),
+            angleDeg = angleDeg(relativeToSpot.xMm, relativeToSpot.yMm),
+            radiusMm = distance(relativeToSpot.xMm, relativeToSpot.yMm),
             xMm = xMm,
             yMm = yMm,
             confidence = 0.72f,
@@ -220,7 +222,7 @@ class SessionRepository(
             autoYMm = yMm,
             resultStatus = "REVIEW_REQUIRED",
             inputMethod = "MANUAL_ADD",
-            announceText = "${clockHour(xMm, yMm)} o'clock, ${score.scoreValue}",
+            announceText = "${clockHour(xMm, yMm, bundle.session.targetFaceCode)} o'clock, ${score.scoreValue}",
         )
         arrowShotDao.upsert(shot)
         operationLogDao.insert(
@@ -259,6 +261,7 @@ class SessionRepository(
             targetFaceCode = bundle.session.targetFaceCode,
             arrowDiameterMm = bundle.session.arrowDiameterMm,
         )
+        val relativeToSpot = relativeToSpotCenter(xMm, yMm, bundle.session.targetFaceCode)
         val nextIndex = bundle.arrows.size + 1
         val now = System.currentTimeMillis()
         val shotId = UUID.randomUUID().toString()
@@ -269,9 +272,9 @@ class SessionRepository(
             detectedAt = now,
             scoreValue = score.scoreValue,
             isX = score.isX,
-            clockHour = clockHour(xMm, yMm),
-            angleDeg = angleDeg(xMm, yMm),
-            radiusMm = distance(xMm, yMm),
+            clockHour = clockHour(xMm, yMm, bundle.session.targetFaceCode),
+            angleDeg = angleDeg(relativeToSpot.xMm, relativeToSpot.yMm),
+            radiusMm = distance(relativeToSpot.xMm, relativeToSpot.yMm),
             xMm = xMm,
             yMm = yMm,
             confidence = confidence,
@@ -281,7 +284,7 @@ class SessionRepository(
             autoYMm = yMm,
             resultStatus = "REVIEW_REQUIRED",
             inputMethod = "AUTO_DETECTED",
-            announceText = "${clockHour(xMm, yMm)} o'clock, ${score.scoreValue}",
+            announceText = "${clockHour(xMm, yMm, bundle.session.targetFaceCode)} o'clock, ${score.scoreValue}",
         )
         arrowShotDao.upsert(shot)
         operationLogDao.insert(
@@ -299,7 +302,7 @@ class SessionRepository(
             shotId = shotId,
             scoreValue = score.scoreValue,
             isX = score.isX,
-            clockHour = clockHour(xMm, yMm),
+            clockHour = clockHour(xMm, yMm, bundle.session.targetFaceCode),
             xMm = xMm,
             yMm = yMm,
             confidence = confidence,
@@ -323,6 +326,30 @@ class SessionRepository(
                 endId = bundle.currentEnd.id,
                 arrowShotId = shot.id,
                 operationType = "DELETE_LAST",
+                createdAt = now,
+            ),
+        )
+        refreshEndAndSessionStats(sessionId)
+    }
+
+    suspend fun clearCurrentEndShots(sessionId: String) {
+        val bundle = getBundle(sessionId) ?: return
+        if (bundle.arrows.isEmpty()) return
+        val now = System.currentTimeMillis()
+        bundle.arrows.forEach { shot ->
+            arrowShotDao.upsert(
+                shot.copy(
+                    isDeleted = true,
+                    deletedAt = now,
+                ),
+            )
+        }
+        operationLogDao.insert(
+            OperationLogEntity(
+                id = UUID.randomUUID().toString(),
+                sessionId = sessionId,
+                endId = bundle.currentEnd.id,
+                operationType = "CLEAR_CURRENT_END",
                 createdAt = now,
             ),
         )
@@ -357,6 +384,7 @@ class SessionRepository(
             targetFaceCode = session.targetFaceCode,
             arrowDiameterMm = session.arrowDiameterMm,
         )
+        val relativeToSpot = relativeToSpotCenter(correctedXMm, correctedYMm, session.targetFaceCode)
         arrowShotDao.upsert(
             shot.copy(
                 correctedScoreValue = correctedResult.scoreValue,
@@ -366,7 +394,10 @@ class SessionRepository(
                 isManuallyCorrected = true,
                 resultStatus = "CORRECTED",
                 confirmedAt = now,
-                announceText = "${clockHour(correctedXMm, correctedYMm)} o'clock, ${correctedResult.scoreValue}",
+                clockHour = clockHour(correctedXMm, correctedYMm, session.targetFaceCode),
+                angleDeg = angleDeg(relativeToSpot.xMm, relativeToSpot.yMm),
+                radiusMm = distance(relativeToSpot.xMm, relativeToSpot.yMm),
+                announceText = "${clockHour(correctedXMm, correctedYMm, session.targetFaceCode)} o'clock, ${correctedResult.scoreValue}",
             ),
         )
         operationLogDao.insert(
@@ -497,7 +528,7 @@ class SessionRepository(
 
         val xValues = points.map { it.first }
         val yValues = points.map { it.second }
-        val specLimitMm = domainOuterRadiusMm(targetFaceCode) / 10f
+        val specLimitMm = domainVisibleSpotRadiusMm(targetFaceCode) / 10f
 
         return ComputedEndMetrics(
             groupCtcMm = maxDistance,
@@ -536,7 +567,7 @@ class SessionRepository(
         arrowDiameterMm = arrowDiameterMm,
     )
 
-    fun outerRadiusMm(targetFaceCode: String): Float = domainOuterRadiusMm(targetFaceCode)
+    fun outerRadiusMm(targetFaceCode: String): Float = domainVisibleSpotRadiusMm(targetFaceCode)
 
     fun normalizedToMm(value: Float, targetFaceCode: String): Float = domainNormalizedToMm(value, targetFaceCode)
 
