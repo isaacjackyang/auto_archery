@@ -35,6 +35,9 @@ fun MetricsRoute(
     viewModel: MetricsViewModel = viewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val localeTag = androidx.compose.ui.platform.LocalConfiguration.current.locales.toLanguageTags()
+    androidx.compose.runtime.LaunchedEffect(localeTag) { viewModel.refreshLanguage() }
+
 
     LaunchedEffect(sessionId) {
         viewModel.bindSession(sessionId)
@@ -132,7 +135,7 @@ private fun MetricsScreen(
                     ) {
                         Text(stringResource(R.string.session_summary), fontWeight = FontWeight.Bold)
                         if (uiState.endSummaries.isEmpty()) {
-                            Text(stringResource(R.string.loading))
+                            Text(stringResource(if (uiState.isLoading) R.string.loading else R.string.no_arrows_yet))
                         } else {
                             uiState.endSummaries.forEach { row -> Text(row) }
                         }
@@ -148,15 +151,15 @@ private fun MetricsScreen(
                     ) {
                         Text(stringResource(R.string.arrow_table), fontWeight = FontWeight.Bold)
                         if (uiState.arrowRows.isEmpty()) {
-                            Text(stringResource(R.string.loading))
+                            Text(stringResource(if (uiState.isLoading) R.string.loading else R.string.no_arrows_yet))
                         } else {
                             uiState.arrowRows.forEach { row ->
                                 Row(
                                     modifier = Modifier.fillMaxWidth(),
                                     horizontalArrangement = Arrangement.SpaceBetween,
                                 ) {
-                                    Text(row.left)
-                                    Text(row.right)
+                                    Text(row.left, modifier = Modifier.weight(1f))
+                                    Text(row.right, modifier = Modifier.weight(1f))
                                 }
                             }
                         }
@@ -176,11 +179,13 @@ private fun MetricsScreen(
                 }
             }
 
+            item { Text(stringResource(R.string.metrics_guide)) }
+            item { Text(stringResource(R.string.export_unavailable)) }
             item {
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Button(onClick = {}) { Text(stringResource(R.string.export_png)) }
-                    OutlinedButton(onClick = {}) { Text(stringResource(R.string.export_pdf)) }
-                    OutlinedButton(onClick = {}) { Text(stringResource(R.string.export_csv)) }
+                    Button(onClick = {}, enabled = false) { Text(stringResource(R.string.export_png)) }
+                    OutlinedButton(onClick = {}, enabled = false) { Text(stringResource(R.string.export_pdf)) }
+                    OutlinedButton(onClick = {}, enabled = false) { Text(stringResource(R.string.export_csv)) }
                 }
             }
         }

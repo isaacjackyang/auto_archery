@@ -48,6 +48,7 @@ import java.util.concurrent.Executors
 fun CameraPreviewSurface(
     modifier: Modifier = Modifier,
     sessionId: String?,
+    targetFaceCode: String,
     knownShotCount: Int,
     isPaused: Boolean,
     zoomRatio: Float,
@@ -77,6 +78,7 @@ fun CameraPreviewSurface(
     val latestOnShotDetected by rememberUpdatedState(onShotDetected)
 
     SideEffect {
+        analyzer.targetFaceCode = targetFaceCode
         analyzer.sessionId = sessionId
         analyzer.knownShotCount = knownShotCount
         analyzer.isPaused = isPaused
@@ -86,6 +88,7 @@ fun CameraPreviewSurface(
     }
 
     var hasPermission by remember { mutableStateOf(context.hasCameraPermission()) }
+    androidx.lifecycle.compose.LifecycleEventEffect(androidx.lifecycle.Lifecycle.Event.ON_RESUME) { hasPermission = context.hasCameraPermission() }
     var bindError by remember { mutableStateOf<String?>(null) }
     var boundCamera by remember { mutableStateOf<Camera?>(null) }
     val cameraPermissionLauncher = rememberLauncherForActivityResult(
@@ -186,13 +189,21 @@ fun CameraPreviewSurface(
             modifier = modifier.background(MaterialTheme.colorScheme.surfaceContainerHighest),
             contentAlignment = Alignment.Center,
         ) {
-            Button(onClick = { cameraPermissionLauncher.launch(Manifest.permission.CAMERA) }) {
-                Text(stringResource(R.string.grant_camera_access))
+            androidx.compose.foundation.layout.Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Text(stringResource(R.string.camera_permission_hint))
+                Button(onClick = { cameraPermissionLauncher.launch(Manifest.permission.CAMERA) }) {
+                    Text(stringResource(R.string.grant_camera_access))
+                }
+                androidx.compose.material3.TextButton(onClick = {
+                    context.startActivity(android.content.Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                        android.net.Uri.parse("package:" + context.packageName)))
+                }) { Text(stringResource(R.string.open_app_settings)) }
             }
         }
     }
 }
 
+@androidx.annotation.OptIn(androidx.camera.camera2.interop.ExperimentalCamera2Interop::class)
 private fun resolveCameraSelection(cameraProvider: ProcessCameraProvider): Pair<CameraSelector, ResolvedCameraProfile> {
     val backCandidates = cameraProvider.availableCameraInfos.mapNotNull { cameraInfo ->
         val camera2Info = Camera2CameraInfo.from(cameraInfo)

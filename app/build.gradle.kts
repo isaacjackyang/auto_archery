@@ -34,6 +34,8 @@ android {
         targetCompatibility = JavaVersion.VERSION_17
     }
 
+    bundle { language { enableSplit = false } }
+
     buildFeatures {
         compose = true
     }
@@ -59,6 +61,7 @@ kapt {
 }
 
 dependencies {
+    testImplementation("junit:junit:4.13.2")
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
     implementation(libs.androidx.lifecycle.runtime.compose)

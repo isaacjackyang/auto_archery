@@ -10,6 +10,9 @@ interface AppPreferenceDao {
     @Query("SELECT * FROM app_preference WHERE id = 1")
     suspend fun getPreference(): AppPreferenceEntity?
 
+    @Query("SELECT * FROM app_preference WHERE id = 1")
+    fun observePreference(): kotlinx.coroutines.flow.Flow<AppPreferenceEntity?>
+
     @Upsert
     suspend fun upsert(preference: AppPreferenceEntity)
 }

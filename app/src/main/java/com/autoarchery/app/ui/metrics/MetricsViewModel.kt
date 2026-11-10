@@ -70,6 +70,8 @@ class MetricsViewModel(
         refresh()
     }
 
+    fun refreshLanguage() { refresh() }
+
     private fun refresh() {
         val sessionId = boundSessionId ?: return
         viewModelScope.launch {
@@ -79,13 +81,13 @@ class MetricsViewModel(
                     sessionRepository.getLatestSession()?.id
                 } else {
                     sessionId
-                } ?: error("No session available")
+                } ?: error(getApplication<Application>().getString(com.autoarchery.app.R.string.metric_text_8))
 
-                val detail = sessionRepository.getSessionDetail(resolvedSessionId) ?: error("Session not found")
+                val detail = sessionRepository.getSessionDetail(resolvedSessionId) ?: error(getApplication<Application>().getString(com.autoarchery.app.R.string.metric_text_9))
                 val visibleEnds = detail.ends.filter { trainingEnd ->
                     detail.arrowsByEnd[trainingEnd.id].orEmpty().isNotEmpty() || trainingEnd.status == "COMPLETED"
                 }
-                val comparison = detail.comparisonSession
+                val comparison = detail.comparisonSession?.takeIf { it.distanceM == detail.session.distanceM && it.targetFaceCode == detail.session.targetFaceCode }
 
                 _uiState.value = MetricsUiState(
                     athleteName = detail.session.athleteName.orEmpty(),
@@ -98,25 +100,25 @@ class MetricsViewModel(
                         .orEmpty(),
                     coachSummary = detail.session.coachSummaryText ?: buildCoachSummary(visibleEnds),
                     comparisonHeadline = if (comparison != null) {
-                        "Compared with the previous session"
+                        getApplication<Application>().getString(com.autoarchery.app.R.string.metric_text_0)
                     } else {
-                        "No baseline session yet"
+                        getApplication<Application>().getString(com.autoarchery.app.R.string.metric_text_1)
                     },
                     comparisonDetails = buildComparisonDetails(detail.session.totalScore, detail.session.avgScore, comparison?.totalScore, comparison?.avgScore),
-                    sessionSummary = "${detail.session.distanceM}m • ${targetFaceLabel(detail.session.targetFaceCode)} • ${detail.session.totalScore} / ${detail.session.totalArrows}",
+                    sessionSummary = getApplication<Application>().getString(com.autoarchery.app.R.string.metric_overview, detail.session.distanceM, targetFaceLabel(detail.session.targetFaceCode), detail.session.totalScore, detail.session.totalArrows, formatValue(detail.session.avgScore)),
                     endSummaries = visibleEnds.map { end ->
-                        "End ${end.endIndex} • ${end.subtotalScore} • CTC ${formatValue(end.groupCtcMm)}mm • Accuracy ${formatValue(end.accuracyOffsetMm)}mm"
+                        getApplication<Application>().getString(com.autoarchery.app.R.string.metric_end, end.endIndex, end.subtotalScore, formatValue(end.groupCtcMm), formatValue(end.accuracyOffsetMm))
                     },
                     arrowRows = visibleEnds.flatMap { end ->
                         detail.arrowsByEnd[end.id].orEmpty().map { arrow ->
                             ArrowMetricsRowUi(
                                 id = arrow.id,
-                                left = "E${end.endIndex} #${arrow.arrowIndex} • ${arrow.effectiveScoreValue} • ${arrow.clockHour} o'clock",
+                                left = getApplication<Application>().getString(com.autoarchery.app.R.string.metric_arrow, end.endIndex, arrow.arrowIndex, arrow.effectiveScoreValue, arrow.clockHour),
                                 right = "X/Y ${formatValue(arrow.effectiveXMm)}, ${formatValue(arrow.effectiveYMm)} • ${statusLabel(arrow)}",
                             )
                         }
                     },
-                    notes = detail.notes.map { note -> note.noteText }.ifEmpty { listOf("No coach notes yet") },
+                    notes = detail.notes.map { note -> note.noteText }.ifEmpty { listOf(getApplication<Application>().getString(com.autoarchery.app.R.string.metric_text_2)) },
                     isLoading = false,
                     errorMessage = null,
                 )
@@ -132,9 +134,9 @@ class MetricsViewModel(
     private fun buildCoachSummary(ends: List<TrainingEndEntity>): String {
         val lastCompletedEnd = ends.lastOrNull { it.detectedArrowCount > 0 }
         return if (lastCompletedEnd == null) {
-            "No arrows recorded yet."
+            getApplication<Application>().getString(com.autoarchery.app.R.string.metric_text_3)
         } else {
-            "Latest end scored ${lastCompletedEnd.subtotalScore}, accuracy ${formatValue(lastCompletedEnd.accuracyOffsetMm)}mm, precision ${formatValue(lastCompletedEnd.precisionMeanRadiusMm)}mm."
+            getApplication<Application>().getString(com.autoarchery.app.R.string.metric_recent, lastCompletedEnd.subtotalScore, formatValue(lastCompletedEnd.accuracyOffsetMm), formatValue(lastCompletedEnd.precisionMeanRadiusMm))
         }
     }
 
@@ -145,12 +147,12 @@ class MetricsViewModel(
         previousAvgScore: Float?,
     ): String {
         if (previousScore == null || previousAvgScore == null) {
-            return "This is the first recorded session for this athlete."
+            return getApplication<Application>().getString(com.autoarchery.app.R.string.metric_text_4)
         }
 
         val scoreDelta = currentScore - previousScore
         val avgDelta = currentAvgScore - previousAvgScore
-        return "Score ${signedInt(scoreDelta)} • Avg ${signedFloat(avgDelta)}"
+        return getApplication<Application>().getString(com.autoarchery.app.R.string.metric_delta, signedInt(scoreDelta), signedFloat(avgDelta))
     }
 
     private fun formatValue(value: Float?): String =
@@ -163,9 +165,9 @@ class MetricsViewModel(
 
     private fun statusLabel(arrow: ArrowShotEntity): String =
         when {
-            arrow.isManuallyCorrected || arrow.resultStatus == "CORRECTED" -> "Corrected"
-            arrow.resultStatus == "CONFIRMED" -> "Confirmed"
-            else -> "Review required"
+            arrow.isManuallyCorrected || arrow.resultStatus == "CORRECTED" -> getApplication<Application>().getString(com.autoarchery.app.R.string.metric_text_5)
+            arrow.resultStatus == "CONFIRMED" -> getApplication<Application>().getString(com.autoarchery.app.R.string.metric_text_6)
+            else -> getApplication<Application>().getString(com.autoarchery.app.R.string.metric_text_7)
         }
 
     private val ArrowShotEntity.effectiveScoreValue: Int

@@ -79,24 +79,30 @@ class SettingsViewModel(
         refresh()
     }
 
-    fun selectLanguage(language: LanguageOptionUi) {
-        viewModelScope.launch {
-            preferenceRepository.setDisplayLanguage(language.code)
-            refresh()
-        }
+    fun selectLanguage(language: LanguageOptionUi) = savePreference {
+        preferenceRepository.setDisplayLanguage(language.code)
     }
 
-    fun toggleTtsFollowDisplayLanguage(enabled: Boolean) {
-        viewModelScope.launch {
-            preferenceRepository.toggleTtsFollowDisplayLanguage(enabled)
-            refresh()
-        }
+    fun toggleTtsFollowDisplayLanguage(enabled: Boolean) = savePreference {
+        preferenceRepository.toggleTtsFollowDisplayLanguage(enabled)
     }
 
-    fun setDefaultAthlete(athleteId: String) {
+    fun setDefaultAthlete(athleteId: String) = savePreference {
+        preferenceRepository.setDefaultAthlete(athleteId)
+    }
+
+    private fun savePreference(change: suspend () -> Unit) {
+        if (_uiState.value.isLoading) return
+        _uiState.value = _uiState.value.copy(isLoading = true, errorMessage = null)
         viewModelScope.launch {
-            preferenceRepository.setDefaultAthlete(athleteId)
-            refresh()
+            try {
+                change()
+                refresh()
+            } catch (error: Exception) {
+                if (error is kotlinx.coroutines.CancellationException) throw error
+                _uiState.value = _uiState.value.copy(isLoading = false,
+                    errorMessage = getApplication<Application>().getString(R.string.settings_save_error))
+            }
         }
     }
 
@@ -120,28 +126,36 @@ class SettingsViewModel(
     }
 
     fun saveAthlete() {
+        if (_uiState.value.isLoading) return
         val draftName = _uiState.value.draftAthleteName.trim()
         if (draftName.isBlank()) {
             return
         }
 
+        _uiState.value = _uiState.value.copy(isLoading = true, errorMessage = null)
         viewModelScope.launch {
-            val athlete = athleteRepository.addAthlete(draftName)
-            val preference = preferenceRepository.getPreference()
-            if (preference.defaultAthleteId == null) {
-                preferenceRepository.setDefaultAthlete(athlete.id)
+            try {
+                val athlete = athleteRepository.addAthlete(draftName)
+                val preference = preferenceRepository.getPreference()
+                if (preference.defaultAthleteId == null) {
+                    preferenceRepository.setDefaultAthlete(athlete.id)
+                }
+                _uiState.value = _uiState.value.copy(
+                    isAddAthleteDialogVisible = false,
+                    draftAthleteName = "",
+                )
+                refresh()
+            } catch (error: Exception) {
+                if (error is kotlinx.coroutines.CancellationException) throw error
+                _uiState.value = _uiState.value.copy(isLoading = false,
+                    errorMessage = getApplication<Application>().getString(R.string.settings_save_error))
             }
-            _uiState.value = _uiState.value.copy(
-                isAddAthleteDialogVisible = false,
-                draftAthleteName = "",
-            )
-            refresh()
         }
     }
 
+    fun refreshLanguage() { refresh() }
+
     private fun refresh() {
-        val addAthleteDialogVisible = _uiState.value.isAddAthleteDialogVisible
-        val draftAthleteName = _uiState.value.draftAthleteName
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(isLoading = true, errorMessage = null)
             runCatching {
@@ -173,23 +187,23 @@ class SettingsViewModel(
                             title = session.title,
                             subtitle = "$dateText • ${session.distanceM}m • ${targetFaceLabel(session.targetFaceCode)}",
                             scoreSummary = if (session.totalArrows > 0) {
-                                "Score ${session.totalScore} / ${session.totalArrows}"
+                                getApplication<Application>().getString(R.string.record_summary, session.totalScore, session.totalArrows)
                             } else {
-                                "No arrows recorded"
+                                getApplication<Application>().getString(R.string.no_arrows_yet)
                             },
                         )
                     },
                     isLoading = false,
-                    isAddAthleteDialogVisible = addAthleteDialogVisible,
-                    draftAthleteName = draftAthleteName,
+                    isAddAthleteDialogVisible = _uiState.value.isAddAthleteDialogVisible,
+                    draftAthleteName = _uiState.value.draftAthleteName,
                     errorMessage = null,
                 )
             }.onFailure { throwable ->
                 _uiState.value = _uiState.value.copy(
                     isLoading = false,
                     errorMessage = throwable.message ?: "Unknown error",
-                    isAddAthleteDialogVisible = addAthleteDialogVisible,
-                    draftAthleteName = draftAthleteName,
+                    isAddAthleteDialogVisible = _uiState.value.isAddAthleteDialogVisible,
+                    draftAthleteName = _uiState.value.draftAthleteName,
                 )
             }
         }

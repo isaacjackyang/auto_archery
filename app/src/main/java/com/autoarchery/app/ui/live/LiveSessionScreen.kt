@@ -89,12 +89,28 @@ fun LiveSessionRoute(
     viewModel: LiveSessionViewModel = viewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val localeTag = androidx.compose.ui.platform.LocalConfiguration.current.locales.toLanguageTags()
+    androidx.compose.runtime.LaunchedEffect(localeTag) { viewModel.refreshLanguage() }
+
 
     LaunchedEffect(sessionId) {
         viewModel.bindSession(sessionId)
     }
 
+    val deletedShot by viewModel.deletedShot.collectAsStateWithLifecycle()
+    val snackbar = androidx.compose.runtime.remember { androidx.compose.material3.SnackbarHostState() }
+    val deletedMessage = stringResource(R.string.arrow_deleted)
+    val undoLabel = stringResource(R.string.undo_action)
+    LaunchedEffect(deletedShot) {
+        val id = deletedShot ?: return@LaunchedEffect
+        if (snackbar.showSnackbar(deletedMessage, undoLabel, withDismissAction = true,
+                duration = androidx.compose.material3.SnackbarDuration.Long) == androidx.compose.material3.SnackbarResult.ActionPerformed) {
+            viewModel.undoDelete(id)
+        }
+        if (viewModel.deletedShot.value == id) viewModel.deletedShot.value = null
+    }
     LiveSessionScreen(
+        snackbar = snackbar,
         uiState = uiState,
         onOpenMetrics = onOpenMetrics,
         onOpenSettings = onOpenSettings,
@@ -136,6 +152,7 @@ fun LiveSessionRoute(
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 private fun LiveSessionScreen(
+    snackbar: androidx.compose.material3.SnackbarHostState,
     uiState: LiveSessionUiState,
     onOpenMetrics: (String) -> Unit,
     onOpenSettings: () -> Unit,
@@ -172,11 +189,42 @@ private fun LiveSessionScreen(
     onTrainingGoalChanged: (String) -> Unit,
     onCreateSession: () -> Unit,
 ) {
+    var discardAdjustment by rememberSaveable { mutableStateOf(false) }
+    val dismissAdjustment: () -> Unit = {
+        if (uiState.adjustmentDraft?.isDirty == true) discardAdjustment = true else onDismissAdjustSheet()
+    }
+    if (discardAdjustment) {
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { discardAdjustment = false },
+            title = { Text(stringResource(R.string.discard_title)) },
+            text = { Text(stringResource(R.string.discard_message)) },
+            confirmButton = { androidx.compose.material3.TextButton(onClick = { discardAdjustment = false; onDismissAdjustSheet() }) { Text(stringResource(R.string.discard_action)) } },
+            dismissButton = { androidx.compose.material3.TextButton(onClick = { discardAdjustment = false }) { Text(stringResource(R.string.cancel)) } },
+        )
+    }
     val configuration = LocalConfiguration.current
     val useDialogForSessionSetup = configuration.screenWidthDp > configuration.screenHeightDp
 
+    var destructiveAction by rememberSaveable(uiState.sessionId) { mutableStateOf<String?>(null) }
+    if (destructiveAction != null) {
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { destructiveAction = null },
+            title = { Text(stringResource(if (destructiveAction == "clear") R.string.confirm_clear_title else R.string.confirm_delete_title)) },
+            text = { Text(stringResource(R.string.confirm_delete_message)) },
+            confirmButton = {
+                androidx.compose.material3.TextButton(onClick = {
+                    val action = destructiveAction
+                    destructiveAction = null
+                    if (action == "clear") onClearCurrentEnd() else onDeleteLast()
+                }) { Text(stringResource(R.string.confirm_remove), color = MaterialTheme.colorScheme.error) }
+            },
+            dismissButton = { androidx.compose.material3.TextButton(onClick = { destructiveAction = null }) { Text(stringResource(R.string.cancel)) } },
+        )
+    }
     Scaffold(
+        snackbarHost = { androidx.compose.material3.SnackbarHost(snackbar) },
         topBar = {
+            Column {
             CompactSessionHeader(
                 title = if (uiState.sessionId == null) {
                     stringResource(R.string.new_session)
@@ -188,6 +236,19 @@ private fun LiveSessionScreen(
                 onOpenMetrics = { uiState.sessionId?.let(onOpenMetrics) },
                 onOpenSettings = onOpenSettings,
             )
+            val hint = when {
+                uiState.sessionId == null -> R.string.step_create
+                uiState.calibrationState == CalibrationState.NotReady -> R.string.step_camera
+                uiState.calibrationState == CalibrationState.NeedsCalibration -> R.string.step_calibrate
+                uiState.isPaused -> R.string.step_paused
+                uiState.pendingCount > 0 || uiState.lowConfidenceCount > 0 -> R.string.step_review
+                !uiState.isRecognitionArmed -> R.string.step_arm
+                else -> R.string.step_wait
+            }
+            Text(stringResource(hint), modifier = Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.primaryContainer).padding(12.dp),
+                color = MaterialTheme.colorScheme.onPrimaryContainer, style = MaterialTheme.typography.bodyMedium)
+            }
+
         },
     ) { innerPadding ->
         BoxWithConstraints(
@@ -196,7 +257,7 @@ private fun LiveSessionScreen(
                 .padding(innerPadding)
                 .padding(horizontal = 8.dp, vertical = 6.dp),
         ) {
-            val wideLayout = maxWidth > maxHeight || maxWidth >= 900.dp
+            val wideLayout = maxWidth >= 840.dp && configuration.fontScale <= 1.3f
 
             if (wideLayout) {
                 Row(
@@ -210,7 +271,7 @@ private fun LiveSessionScreen(
                         onResetCalibration = onResetCalibration,
                         onIncreaseDigitalZoom = onIncreaseDigitalZoom,
                         onDecreaseDigitalZoom = onDecreaseDigitalZoom,
-                        onClearCurrentEnd = onClearCurrentEnd,
+                        onClearCurrentEnd = { destructiveAction = "clear" },
                         onNextRound = onConfirmEnd,
                         onZoomRatioApplied = onZoomRatioApplied,
                         onCameraReadyChanged = onCameraReadyChanged,
@@ -238,7 +299,7 @@ private fun LiveSessionScreen(
                 }
             } else {
                 Column(
-                    modifier = Modifier.fillMaxSize(),
+                    modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()),
                     verticalArrangement = Arrangement.spacedBy(10.dp),
                 ) {
                     CameraPanel(
@@ -248,7 +309,7 @@ private fun LiveSessionScreen(
                         onResetCalibration = onResetCalibration,
                         onIncreaseDigitalZoom = onIncreaseDigitalZoom,
                         onDecreaseDigitalZoom = onDecreaseDigitalZoom,
-                        onClearCurrentEnd = onClearCurrentEnd,
+                        onClearCurrentEnd = { destructiveAction = "clear" },
                         onNextRound = onConfirmEnd,
                         onZoomRatioApplied = onZoomRatioApplied,
                         onCameraReadyChanged = onCameraReadyChanged,
@@ -271,7 +332,7 @@ private fun LiveSessionScreen(
                         onConfirmHighConfidence = onConfirmHighConfidence,
                         onConfirmEnd = onConfirmEnd,
                         isWideLayout = false,
-                        modifier = Modifier.fillMaxWidth().weight(1f, fill = true),
+                        modifier = Modifier.fillMaxWidth(),
                     )
                 }
             }
@@ -290,7 +351,7 @@ private fun LiveSessionScreen(
     }
 
     if (uiState.isAdjustSheetVisible && uiState.selectedShot != null && uiState.adjustmentDraft != null) {
-        ModalBottomSheet(onDismissRequest = onDismissAdjustSheet) {
+        ModalBottomSheet(onDismissRequest = dismissAdjustment) {
             BoxWithConstraints(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -322,7 +383,7 @@ private fun LiveSessionScreen(
                                 ),
                             )
                             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                                OutlinedButton(onClick = onDismissAdjustSheet) { Text(stringResource(R.string.close)) }
+                                OutlinedButton(onClick = dismissAdjustment) { Text(stringResource(R.string.close)) }
                                 Button(
                                     onClick = onSaveAdjustments,
                                     enabled = uiState.adjustmentDraft.isDirty,
@@ -369,7 +430,7 @@ private fun LiveSessionScreen(
                             onUpdateAdjustmentPosition = onUpdateAdjustmentPosition,
                         )
                         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                            OutlinedButton(onClick = onDismissAdjustSheet) { Text(stringResource(R.string.close)) }
+                            OutlinedButton(onClick = dismissAdjustment) { Text(stringResource(R.string.close)) }
                             Button(
                                 onClick = onSaveAdjustments,
                                 enabled = uiState.adjustmentDraft.isDirty,
@@ -541,6 +602,7 @@ private fun CameraPanel(
                         CameraPreviewSurface(
                             modifier = Modifier.fillMaxSize(),
                             sessionId = uiState.sessionId,
+                            targetFaceCode = uiState.targetFaceCode,
                             knownShotCount = uiState.shots.size,
                             isPaused = uiState.isPaused || uiState.sessionId == null || !uiState.isRecognitionArmed,
                             zoomRatio = uiState.zoomRatio,
@@ -577,6 +639,7 @@ private fun CameraPanel(
                     CameraPreviewSurface(
                         modifier = Modifier.fillMaxSize(),
                         sessionId = uiState.sessionId,
+                        targetFaceCode = uiState.targetFaceCode,
                         knownShotCount = uiState.shots.size,
                         isPaused = uiState.isPaused || uiState.sessionId == null || !uiState.isRecognitionArmed,
                         zoomRatio = uiState.zoomRatio,
@@ -665,7 +728,7 @@ private fun CameraControlColumn(
         }
     } else {
         Column(
-            modifier = modifier.verticalScroll(rememberScrollState()),
+            modifier = modifier,
             verticalArrangement = Arrangement.spacedBy(6.dp),
         ) {
             CameraStatusStrip(
@@ -750,8 +813,8 @@ private fun CameraStatusStrip(
         verticalAlignment = Alignment.CenterVertically,
     ) {
         CompactPillStat(uiState.zoomLabel)
-        CompactPillStat(uiState.currentEndLabel)
-        CompactPillStat(uiState.currentArrowLabel)
+        CompactPillStat(stringResource(R.string.end_counter, uiState.currentEndIndex, uiState.totalEnds))
+        CompactPillStat(stringResource(R.string.arrow_counter, uiState.currentArrowIndex.coerceAtMost(uiState.arrowsPerEnd), uiState.arrowsPerEnd))
         CompactPillStat("${stringResource(R.string.recognition_status)}: ${uiState.recognitionLabel}")
     }
 }
@@ -841,8 +904,7 @@ private fun TargetReviewPanel(
     modifier: Modifier = Modifier,
 ) {
     Column(
-        modifier = (if (isWideLayout) modifier.fillMaxHeight() else modifier)
-            .verticalScroll(rememberScrollState()),
+        modifier = if (isWideLayout) modifier.fillMaxHeight().verticalScroll(rememberScrollState()) else modifier,
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)) {
@@ -873,7 +935,7 @@ private fun TargetReviewPanel(
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
                 ) {
                     CompactPillButton(
-                        label = "All",
+                        label = stringResource(R.string.filter_all),
                         selected = uiState.reviewFilter == ReviewFilter.All,
                         onClick = { onApplyFilter(ReviewFilter.All) },
                     )
@@ -940,6 +1002,11 @@ private fun TargetReviewPanel(
             }
         }
 
+        var showTools by rememberSaveable { mutableStateOf(false) }
+        androidx.compose.material3.TextButton(onClick = { showTools = !showTools }) {
+            Text(stringResource(if (showTools) R.string.hide_tools else R.string.show_tools))
+        }
+        if (showTools) {
         Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)) {
             FlowRow(
                 modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
@@ -969,6 +1036,7 @@ private fun TargetReviewPanel(
             }
         }
 
+        }
         uiState.endSummary?.let { endSummary ->
             Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)) {
                 Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -1226,9 +1294,9 @@ private fun CompactPillButton(
     ) {
         Text(
             text = label,
-            style = MaterialTheme.typography.labelSmall,
+            style = MaterialTheme.typography.labelLarge,
             fontWeight = FontWeight.SemiBold,
-            maxLines = 1,
+            maxLines = 2,
             overflow = TextOverflow.Ellipsis,
             modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
         )
@@ -1277,9 +1345,9 @@ private fun CompactOutlinedActionButton(
     ) {
         Text(
             text = label,
-            style = MaterialTheme.typography.labelSmall,
+            style = MaterialTheme.typography.labelLarge,
             fontWeight = FontWeight.SemiBold,
-            maxLines = 1,
+            maxLines = 2,
             overflow = TextOverflow.Ellipsis,
         )
     }
@@ -1304,9 +1372,9 @@ private fun CompactFilledActionButton(
     ) {
         Text(
             text = label,
-            style = MaterialTheme.typography.labelSmall,
+            style = MaterialTheme.typography.labelLarge,
             fontWeight = FontWeight.SemiBold,
-            maxLines = 1,
+            maxLines = 2,
             overflow = TextOverflow.Ellipsis,
         )
     }
@@ -1398,8 +1466,8 @@ private fun ShotRow(
                 Text("${shot.scoreLabel} • ${shot.clockLabel}")
             }
             Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text(shot.status.label)
-                Text(if (shot.isEdited) "Edited" else "Auto")
+                Text(stringResource(when (shot.status) { com.autoarchery.app.ui.model.ShotStatus.Pending -> R.string.status_pending; com.autoarchery.app.ui.model.ShotStatus.Confirmed -> R.string.status_confirmed; com.autoarchery.app.ui.model.ShotStatus.Edited -> R.string.shot_edited; com.autoarchery.app.ui.model.ShotStatus.LowConfidence -> R.string.status_low }))
+                Text(stringResource(if (shot.isEdited) R.string.shot_edited else R.string.shot_auto))
             }
         }
     }

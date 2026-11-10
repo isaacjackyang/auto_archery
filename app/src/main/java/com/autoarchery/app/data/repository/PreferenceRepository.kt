@@ -6,6 +6,8 @@ import com.autoarchery.app.data.local.entity.AppPreferenceEntity
 class PreferenceRepository(
     private val preferenceDao: AppPreferenceDao,
 ) {
+    fun observePreference() = preferenceDao.observePreference()
+
     suspend fun getPreference(): AppPreferenceEntity {
         val existing = preferenceDao.getPreference()
         if (existing != null) return existing

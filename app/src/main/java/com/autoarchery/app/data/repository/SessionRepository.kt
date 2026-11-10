@@ -250,10 +250,6 @@ class SessionRepository(
 
         val xMm = domainNormalizedToMm(xNormalized, bundle.session.targetFaceCode)
         val yMm = domainNormalizedToMm(yNormalized, bundle.session.targetFaceCode)
-        val isDuplicate = bundle.arrows.any { arrow ->
-            distance(arrow.effectiveXMm - xMm, arrow.effectiveYMm - yMm) <= bundle.session.arrowDiameterMm
-        }
-        if (isDuplicate) return null
 
         val score = calculateShotScore(
             xMm = xMm,
@@ -309,9 +305,9 @@ class SessionRepository(
         )
     }
 
-    suspend fun deleteLastShot(sessionId: String) {
-        val bundle = getBundle(sessionId) ?: return
-        val shot = bundle.arrows.lastOrNull() ?: return
+    suspend fun deleteLastShot(sessionId: String): String? {
+        val bundle = getBundle(sessionId) ?: return null
+        val shot = bundle.arrows.lastOrNull() ?: return null
         val now = System.currentTimeMillis()
         arrowShotDao.upsert(
             shot.copy(
@@ -330,6 +326,21 @@ class SessionRepository(
             ),
         )
         refreshEndAndSessionStats(sessionId)
+        return shot.id
+    }
+
+    suspend fun restoreDeletedShot(sessionId: String, shotId: String): Boolean {
+        val bundle = getBundle(sessionId) ?: return false
+        val shot = arrowShotDao.getById(shotId) ?: return false
+        val index = com.autoarchery.app.domain.restoredArrowIndex(
+            shot.isDeleted, shot.endId == bundle.currentEnd.id, bundle.currentEnd.status == "COMPLETED",
+            bundle.currentEnd.expectedArrowCount, bundle.arrows.map { it.arrowIndex }, shot.arrowIndex,
+        ) ?: return false
+        arrowShotDao.upsert(shot.copy(isDeleted = false, deletedAt = null, arrowIndex = index))
+        operationLogDao.insert(OperationLogEntity(id = UUID.randomUUID().toString(), sessionId = sessionId,
+            endId = shot.endId, arrowShotId = shot.id, operationType = "UNDO_DELETE", createdAt = System.currentTimeMillis()))
+        refreshEndAndSessionStats(sessionId)
+        return true
     }
 
     suspend fun clearCurrentEndShots(sessionId: String) {

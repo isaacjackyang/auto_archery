@@ -1,5 +1,9 @@
 package com.autoarchery.app.ui.settings
 
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.ui.semantics.Role
+import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -37,6 +41,9 @@ fun SettingsRoute(
     viewModel: SettingsViewModel = viewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val localeTag = androidx.compose.ui.platform.LocalConfiguration.current.locales.toLanguageTags()
+    androidx.compose.runtime.LaunchedEffect(localeTag) { viewModel.refreshLanguage() }
+
     SettingsScreen(
         uiState = uiState,
         onNavigateBack = onNavigateBack,
@@ -83,9 +90,14 @@ private fun SettingsScreen(
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
             item {
-                Card(colors = CardDefaults.cardColors(containerColor = androidx.compose.material3.MaterialTheme.colorScheme.surfaceContainerLow)) {
+                Text(stringResource(R.string.settings_intro), style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+                if (uiState.isLoading) LinearProgressIndicator(modifier = Modifier.fillMaxWidth().padding(top = 12.dp))
+            }
+            item {
+                Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = androidx.compose.material3.MaterialTheme.colorScheme.surfaceContainerLow)) {
                     Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                        Text(stringResource(R.string.select_athlete), fontWeight = FontWeight.Bold)
+                        Text(stringResource(R.string.select_athlete), fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
                         Text(stringResource(R.string.default_athlete, uiState.defaultAthleteName.ifBlank { "-" }))
                         uiState.athletes.forEach { athlete ->
                             Row(
@@ -93,13 +105,14 @@ private fun SettingsScreen(
                                 horizontalArrangement = Arrangement.SpaceBetween,
                                 verticalAlignment = Alignment.CenterVertically,
                             ) {
-                                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                Column(modifier = Modifier.weight(1f).padding(end = 12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                                     Text(athlete.name, fontWeight = FontWeight.SemiBold)
-                                    Text(athlete.status)
+                                    if (athlete.isDefault) Text(stringResource(R.string.athlete_default_hint), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                 }
                                 FilterChip(
                                     selected = athlete.isDefault,
                                     onClick = { onSetDefaultAthlete(athlete.id) },
+                                    enabled = !uiState.isLoading,
                                     label = {
                                         Text(
                                             if (athlete.isDefault) {
@@ -112,7 +125,7 @@ private fun SettingsScreen(
                                 )
                             }
                         }
-                        OutlinedButton(onClick = onOpenAddAthleteDialog) {
+                        OutlinedButton(onClick = onOpenAddAthleteDialog, enabled = !uiState.isLoading, modifier = Modifier.fillMaxWidth()) {
                             Text(stringResource(R.string.add_athlete))
                         }
                     }
@@ -120,17 +133,22 @@ private fun SettingsScreen(
             }
 
             item {
-                Card(colors = CardDefaults.cardColors(containerColor = androidx.compose.material3.MaterialTheme.colorScheme.surfaceContainerLow)) {
+                Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = androidx.compose.material3.MaterialTheme.colorScheme.surfaceContainerLow)) {
                     Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                        Text(stringResource(R.string.language), fontWeight = FontWeight.Bold)
+                        Text(stringResource(R.string.language), fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
                         uiState.languages.forEach { option ->
                             Row(
-                                modifier = Modifier.fillMaxWidth(),
+                                modifier = Modifier.fillMaxWidth().selectable(
+                                    selected = uiState.selectedLanguage == option,
+                                    enabled = !uiState.isLoading, role = Role.RadioButton,
+                                    onClick = { onSelectLanguage(option) },
+                                ).padding(vertical = 4.dp),
                                 verticalAlignment = Alignment.CenterVertically,
                             ) {
                                 RadioButton(
                                     selected = uiState.selectedLanguage == option,
-                                    onClick = { onSelectLanguage(option) },
+                                    onClick = null,
+                                    enabled = !uiState.isLoading,
                                 )
                                 Text(stringResource(option.labelRes))
                             }
@@ -140,10 +158,11 @@ private fun SettingsScreen(
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
-                            Text(stringResource(R.string.tts_follow_display_language))
+                            Text(stringResource(R.string.tts_follow_display_language), modifier = Modifier.weight(1f).padding(end = 16.dp))
                             Switch(
                                 checked = uiState.ttsFollowDisplayLanguage,
                                 onCheckedChange = onToggleTtsFollowDisplayLanguage,
+                                enabled = !uiState.isLoading,
                             )
                         }
                     }
@@ -151,17 +170,17 @@ private fun SettingsScreen(
             }
 
             item {
-                Card(colors = CardDefaults.cardColors(containerColor = androidx.compose.material3.MaterialTheme.colorScheme.surfaceContainerLow)) {
+                Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = androidx.compose.material3.MaterialTheme.colorScheme.surfaceContainerLow)) {
                     Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                        Text(stringResource(R.string.training_records), fontWeight = FontWeight.Bold)
-                        if (uiState.recentSessions.isEmpty()) {
+                        Text(stringResource(R.string.training_records), fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
+                        if (uiState.recentSessions.isEmpty() && !uiState.isLoading) {
                             Text(stringResource(R.string.no_training_records))
                         } else {
                             uiState.recentSessions.forEach { session ->
                                 Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                                     Text(session.title, fontWeight = FontWeight.SemiBold)
-                                    Text(session.subtitle)
-                                    Text(session.scoreSummary)
+                                    Text(session.subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    Text(session.scoreSummary, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
                                 }
                             }
                         }
@@ -191,12 +210,15 @@ private fun SettingsScreen(
                     modifier = Modifier.fillMaxWidth(),
                     label = { Text(stringResource(R.string.athlete_name_label)) },
                     singleLine = true,
+                    enabled = !uiState.isLoading,
+                    isError = uiState.errorMessage != null,
+                    supportingText = { uiState.errorMessage?.let { Text(it) } },
                 )
             },
             confirmButton = {
                 TextButton(
                     onClick = onSaveAthlete,
-                    enabled = uiState.draftAthleteName.isNotBlank(),
+                    enabled = uiState.draftAthleteName.isNotBlank() && !uiState.isLoading,
                 ) {
                     Text(stringResource(R.string.save))
                 }

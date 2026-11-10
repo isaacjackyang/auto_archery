@@ -117,7 +117,7 @@ class LiveSessionViewModel(
                 yMm = correctedYMm,
                 previewScoreValue = correction.scoreValue,
                 previewScoreLabel = scoreLabel(correction.scoreValue, correction.isX),
-                previewClockLabel = clockLabel(correctedXMm, correctedYMm, _uiState.value.targetFaceCode),
+                previewClockLabel = getApplication<Application>().getString(R.string.clock_direction, clockHour(correctedXMm, correctedYMm, _uiState.value.targetFaceCode)),
                 isDirty = true,
             ),
         ).recalculate()
@@ -167,7 +167,7 @@ class LiveSessionViewModel(
     fun onCameraProfileResolved(profile: ResolvedCameraProfile) {
         resolvedCameraProfile = profile
         val currentState = _uiState.value
-        val nextZoomRatio = if (currentState.zoomLabel == WAITING_FOR_CAMERA_LABEL) {
+        val nextZoomRatio = if (currentState.zoomLabel == getApplication<Application>().getString(R.string.camera_not_ready)) {
             profile.zoomRatio
         } else {
             currentState.zoomRatio.coerceAtLeast(profile.zoomRatio)
@@ -213,25 +213,31 @@ class LiveSessionViewModel(
     }
 
     fun onShotDetected(result: DetectedShotResult) {
-        val sessionId = _uiState.value.sessionId ?: return
-        if (_uiState.value.isPaused || isRecordingDetection) return
-
-        isRecordingDetection = true
         viewModelScope.launch {
-            runCatching {
-                sessionRepository.recordDetectedShot(
-                    sessionId = sessionId,
-                    xNormalized = result.xNormalized,
-                    yNormalized = result.yNormalized,
-                    confidence = result.confidence,
-                )
-            }.onSuccess { recordedShot ->
-                if (recordedShot != null) {
-                    speakShot(recordedShot)
-                    refresh(preselectedShotId = recordedShot.shotId)
+            val sessionId = _uiState.value.sessionId
+            if (sessionId == null || sessionId != result.sourceSessionId || !result.isCurrent() ||
+                _uiState.value.isPaused || !_uiState.value.isRecognitionArmed || isRecordingDetection) {
+                result.acknowledge(false)
+                return@launch
+            }
+            isRecordingDetection = true
+            var committed = false
+            try {
+                val recorded = sessionRepository.recordDetectedShot(sessionId, result.xNormalized, result.yNormalized, result.confidence)
+                if (recorded != null) {
+                    committed = true
+                    refresh(preselectedShotId = recorded.shotId)
+                    speakShot(recorded)
                 }
-            }.also {
+            } catch (error: Exception) {
+                if (error is kotlinx.coroutines.CancellationException) throw error
+            } finally {
+                result.acknowledge(committed)
                 isRecordingDetection = false
+                if (!committed && _uiState.value.sessionId == sessionId) {
+                    _uiState.value = _uiState.value.copy(isPaused = true,
+                        errorMessage = getApplication<Application>().getString(R.string.detection_record_failed))
+                }
             }
         }
     }
@@ -306,10 +312,22 @@ class LiveSessionViewModel(
         }
     }
 
+    val deletedShot = MutableStateFlow<String?>(null)
+
+    fun undoDelete(shotId: String) {
+        val sessionId = _uiState.value.sessionId ?: return
+        viewModelScope.launch {
+            val restored = sessionRepository.restoreDeletedShot(sessionId, shotId)
+            deletedShot.value = null
+            refresh()
+            if (!restored) _uiState.value = _uiState.value.copy(errorMessage = getApplication<Application>().getString(R.string.undo_unavailable))
+        }
+    }
+
     fun deleteLastShot() {
         val sessionId = _uiState.value.sessionId ?: return
         viewModelScope.launch {
-            sessionRepository.deleteLastShot(sessionId)
+            deletedShot.value = sessionRepository.deleteLastShot(sessionId)
             refresh()
         }
     }
@@ -454,6 +472,8 @@ class LiveSessionViewModel(
         }
     }
 
+    fun refreshLanguage() { refresh() }
+
     private fun refresh(preselectedShotId: String? = _uiState.value.selectedShotId) {
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(isLoading = true, errorMessage = null)
@@ -510,12 +530,12 @@ class LiveSessionViewModel(
                     val effectiveIsX = shot.effectiveIsX
                     ShotRowUi(
                         id = shot.id,
-                        label = "Arrow ${shot.arrowIndex}",
+                        label = getApplication<Application>().getString(R.string.arrow_number, shot.arrowIndex),
                         scoreValue = effectiveScoreValue,
                         isX = effectiveIsX,
                         scoreLabel = scoreLabel(effectiveScoreValue, effectiveIsX),
                         clockHour = clockHour(effectiveXMm, effectiveYMm, session.targetFaceCode),
-                        clockLabel = clockLabel(effectiveXMm, effectiveYMm, session.targetFaceCode),
+                        clockLabel = getApplication<Application>().getString(R.string.clock_direction, clockHour(effectiveXMm, effectiveYMm, session.targetFaceCode)),
                         xMm = effectiveXMm,
                         yMm = effectiveYMm,
                         xNormalized = mmToNormalized(effectiveXMm, session.targetFaceCode),
@@ -565,8 +585,8 @@ class LiveSessionViewModel(
                     markers = mappedMarkers,
                     selectedShotId = selectedShotId,
                     endSummary = EndSummaryUi(
-                        summaryLine = "Score ${bundle.currentEnd.subtotalScore} • X ${bundle.currentEnd.xCount} • 10s ${bundle.currentEnd.tenCount}",
-                        detailLine = "CTC ${bundle.currentEnd.groupCtcMm ?: 0f}mm • Accuracy ${bundle.currentEnd.accuracyOffsetMm ?: 0f}mm",
+                        summaryLine = getApplication<Application>().getString(R.string.score_summary, bundle.currentEnd.subtotalScore, bundle.currentEnd.xCount, bundle.currentEnd.tenCount),
+                        detailLine = getApplication<Application>().getString(R.string.group_summary, bundle.currentEnd.groupCtcMm?.toString() ?: "—", bundle.currentEnd.accuracyOffsetMm?.toString() ?: "—"),
                     ),
                     calibrationState = calibrationState,
                     calibrationLabel = calibrationLabel(calibrationState, session.calibrationConfidence),
@@ -662,7 +682,7 @@ class LiveSessionViewModel(
                         isX = previewDraft.previewScoreLabel.contains("X"),
                         scoreLabel = previewDraft.previewScoreLabel,
                         clockLabel = previewDraft.previewClockLabel,
-                        detailLabel = "${previewDraft.previewClockLabel} • ${shot.status.label}",
+                        detailLabel = "${previewDraft.previewClockLabel} • ${localizedStatus(shot.status)}",
                         xMm = previewDraft.xMm,
                         yMm = previewDraft.yMm,
                         xNormalized = previewDraft.xNormalized,
@@ -676,7 +696,7 @@ class LiveSessionViewModel(
                         isX = shot.isX,
                         scoreLabel = shot.scoreLabel,
                         clockLabel = shot.clockLabel,
-                        detailLabel = "${shot.clockLabel} • ${shot.status.label}",
+                        detailLabel = "${shot.clockLabel} • ${localizedStatus(shot.status)}",
                         xMm = shot.xMm,
                         yMm = shot.yMm,
                         xNormalized = shot.xNormalized,
@@ -719,7 +739,7 @@ class LiveSessionViewModel(
     private fun defaultState(): LiveSessionUiState =
         LiveSessionUiState(
             sessionId = null,
-            sessionTitle = "New Session",
+            sessionTitle = getApplication<Application>().getString(R.string.new_session),
             athleteName = "",
             targetFaceCode = "FACE_122CM",
             arrowDiameterMm = 5.5f,
@@ -729,7 +749,7 @@ class LiveSessionViewModel(
             arrowsPerEnd = 6,
             isPaused = false,
             zoomRatio = 1f,
-            zoomLabel = WAITING_FOR_CAMERA_LABEL,
+            zoomLabel = getApplication<Application>().getString(R.string.camera_not_ready),
             isRecognitionArmed = false,
             recognitionLabel = recognitionLabel(
                 isCameraReady = false,
@@ -770,18 +790,25 @@ class LiveSessionViewModel(
         private const val DEFAULT_TTS_LANGUAGE = "zh-TW"
         private const val DIGITAL_ZOOM_STEP = 0.25f
         private const val MAX_REQUESTED_ZOOM_RATIO = 8f
-        private const val WAITING_FOR_CAMERA_LABEL = "Waiting for camera"
+
     }
+
+    private fun localizedStatus(status: ShotStatus): String = getApplication<Application>().getString(when (status) {
+        ShotStatus.Pending -> R.string.status_pending
+        ShotStatus.Confirmed -> R.string.status_confirmed
+        ShotStatus.Edited -> R.string.shot_edited
+        ShotStatus.LowConfidence -> R.string.status_low
+    })
 
     private fun calibrationLabel(state: CalibrationState, confidence: Float?): String =
         when (state) {
-            CalibrationState.NotReady -> "Camera not ready"
-            CalibrationState.NeedsCalibration -> "Needs calibration"
+            CalibrationState.NotReady -> getApplication<Application>().getString(com.autoarchery.app.R.string.camera_not_ready)
+            CalibrationState.NeedsCalibration -> getApplication<Application>().getString(com.autoarchery.app.R.string.needs_calibration)
             CalibrationState.Calibrated -> {
                 if (confidence != null) {
-                    "Calibrated ${(confidence * 100f).roundToInt()}%"
+                    getApplication<Application>().getString(R.string.calibrated) + " ${(confidence * 100f).roundToInt()}%"
                 } else {
-                    "Calibrated"
+                    getApplication<Application>().getString(com.autoarchery.app.R.string.calibrated)
                 }
             }
         }
@@ -821,9 +848,9 @@ class LiveSessionViewModel(
     ): String {
         val zoomText = zoomRatio.displayZoomRatio()
         return when (profile?.cameraMode) {
-            "TELEPHOTO" -> "Telephoto $zoomText"
-            "MAIN_ZOOM" -> "Main zoom $zoomText"
-            else -> "Zoom $zoomText"
+            "TELEPHOTO" -> getApplication<Application>().getString(R.string.zoom_telephoto, zoomText)
+            "MAIN_ZOOM" -> getApplication<Application>().getString(R.string.zoom_main, zoomText)
+            else -> getApplication<Application>().getString(R.string.zoom_generic, zoomText)
         }
     }
 
