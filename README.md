@@ -1,440 +1,110 @@
 # Auto Archery
 
-Auto Archery 是一個以 Android 為目標平台的射箭訓練輔助 App 原型。它使用手機相機觀察單一標靶，嘗試自動偵測新箭、計算落點分數與時鐘方向、進行語音播報，並把訓練資料保存到本機。
+Auto Archery 是 Android 射箭訓練輔助 App，可記錄訓練、嘗試辨識箭點、計分、語音播報，並在手機上保存資料。
 
-這個專案目前屬於 MVP / prototype 階段，重點放在離線本機流程、即時判定 UI、逐箭確認與基礎數據分析。
+目前為 **0.2.0 預覽測試版**。自動辨識結果需要逐箭人工確認，尚未完成實場準確率驗證。
 
----
+## 下載與安裝
 
-## 目前已完成的功能
+- [下載 AutoArchery-v0.2.0-preview.apk](https://github.com/isaacjackyang/auto_archery/raw/refs/heads/main/downloads/AutoArchery-v0.2.0-preview.apk)
+- [下載 SHA-256 校驗碼](downloads/AutoArchery-v0.2.0-preview.apk.sha256)
+- 系統需求：Android 8.0 或更新版本。
 
-- 建立訓練 Session
-  - 可選擇選手、距離、每局箭數、靶紙規格與訓練目標。
-  - 目前內建距離選項為 `18m`、`30m`、`50m`、`70m`。
-  - 目前支援靶紙規格為 `122 cm` 與 `40 cm`。
+將 APK 下載到手機後開啟安裝。若 Android 要求允許此來源安裝應用程式，依系統提示授權後再繼續。這是以測試金鑰簽署的預覽版，供安裝體驗使用。
 
-- 相機預覽與裝置控制
-  - 使用 CameraX 顯示相機預覽。
-  - 會優先挑選後鏡頭中焦段最長的鏡頭作為長焦；若沒有明顯長焦，會退回主鏡頭並套用數位變焦。
-  - 進入 App 後會保持螢幕常亮，適合固定在腳架上使用。
+若更新時出現簽章不相容，請勿直接解除安裝：解除安裝會移除本機訓練資料，而目前尚無匯出功能。
 
-- 靶面校正與箭點偵測
-  - 會根據畫面亮度特徵估計標靶橢圓、中心與半徑。
-  - 將畫面正規化後，用前後 frame 差異偵測新箭。
-  - 偵測到新箭後會換算成標準化座標並記錄信心值。
+## 第一次使用
 
-- 自動判分與即時畫面
-  - 支援 line-cutter 判分邏輯。
-  - 可計算分數、X、時鐘方向與 X/Y 偏移。
-  - 即時畫面會顯示數位靶、逐箭列表、本局分數與待確認 / 低信心數量。
+1. 開啟 App，點上方「設定」。
+2. 在「選手管理」點「新增選手」，輸入姓名並按「儲存」。
+3. 將常用選手「設為預設」，之後建立訓練會自動選用。
+4. 選擇「繁體中文」或「英文」；語言變更會自動保存並重新載入介面。
+5. 開啟「語音播報跟隨顯示語言」，讓播報使用所選語言。
+6. 按「關閉」回到訓練畫面。
 
-- 人工確認與備援操作
-  - 可選中任一箭後進行 `確認`、`重新播報`、`微調`。
-  - 微調模式可直接在數位靶上拖曳箭點，儲存後重新計分。
-  - 提供 `手動新增箭`、`刪除上一箭`、`重判選中箭`、`暫停 / 恢復自動判定`、`確認高信心箭`。
+## 建立訓練
 
-- 數據頁與本機資料保存
-  - 使用 Room 將 Session、End、Arrow 與操作紀錄保存在本機資料庫。
-  - 數據頁可查看訓練摘要、各局摘要、逐箭資料與和上一筆訓練的基礎比較。
-  - 會計算每局的 `CTC`、`Accuracy`、`Precision Mean Radius`、`Cpk X/Y`。
+1. 點「新訓練」。
+2. 選擇選手、距離、每局箭數及實際使用的靶紙。
+3. 視需要填寫訓練目標，再按「建立訓練」。
 
-- 設定頁
-  - 可新增選手、設定預設選手。
-  - 可查看最近訓練紀錄摘要。
-  - 可保存顯示語言偏好與 `TTS follows display language` 設定。
+距離選項為 18、30、50、70 公尺。靶紙選項包括 122 cm、80 cm 十環／內五環、60 cm 內六環、40 cm 十環／內六環，以及 20 cm 內五環／三靶面。**靶紙可供選擇與計分，不代表所有規格都能可靠自動辨識；三靶面請使用手動記錄。**
 
----
+## 對準標靶並啟動辨識
 
-## 使用方式
+1. 固定手機，盡量正對單一標靶，讓外圈完整入鏡。
+2. 若畫面要求權限，點「允許相機權限」。若已拒絕且無法再次授權，點「開啟應用程式設定」，允許相機後返回 App。
+3. 使用「+0.25x」／「-0.25x」調整倍率，等待校正狀態顯示「已校正」。操作列可左右滑動。
+4. 點 **「Set」** 啟動辨識。這是目前畫面上的按鈕名稱；只完成校正還不會開始記箭。
+5. 保持手機穩定，觀察畫面上方的狀態提示及逐箭列表。
 
-建議在實體 Android 手機上執行，並把手機固定在腳架或穩定支架上。由於此 App 依賴相機與語音播報，模擬器只適合做基本 UI 驗證，不適合完整體驗。
+| 畫面狀態 | 下一步 |
+| --- | --- |
+| 相機未就緒 | 檢查權限與相機訊息。仍可手動記錄。 |
+| 待校正 | 調整正面構圖、完整外圈與光線，等待校正。 |
+| 校正完成、等待 Set | 點「Set」。 |
+| 辨識中 | 保持手機穩定，等待箭點出現。 |
+| 待確認／低信心 | 選取箭點，核對位置與分數。 |
+| 已暫停 | 確認狀況後點「恢復自動判定」。 |
+| 箭點未完成記錄 | 先核對當局列表，避免重複手動補箭，再恢復辨識。 |
 
-1. 安裝並啟動 App。
-2. 首次進入時允許相機權限。
-3. 點 `New Session` 建立新的訓練。
-4. 選擇選手、距離、每局箭數、靶紙規格，必要時輸入訓練目標。
-5. 建立後把相機對準單一標靶，按 `Calibrate` 完成校正；若畫面偏掉可再按 `Recalibrate`。
-6. 開始射箭，系統會在偵測到新箭後：
-   - 更新數位靶
-   - 加入逐箭列表
-   - 計算分數與方向
-   - 用 TTS 播報結果
-7. 若某箭需要複查，可在逐箭列表點選後使用：
-   - `Confirm Selected Shot`
-   - `Adjust`
-   - `Replay TTS`
-8. 訓練中也可以用快速操作處理例外情況：
-   - `Manual Add`
-   - `Delete Last`
-   - `Reanalyze Selected`
-   - `Pause Auto` / `Resume Auto`
-   - `Confirm High Confidence`
-9. 一局結束後可按 `Confirm End` 或 `Next Round` 進入下一局。
-10. 點 `Metrics` 查看摘要與逐箭數據，點 `Settings` 管理選手與查看近期訓練。
+手機移動、倍率改變或靶面位置偏移後，請重新檢查校正；需要時點「重新校正」，待完成後再點「Set」。無法校正時使用手動記錄，不要將未確認的結果當作正式成績。
 
----
+## 核對與修正箭點
 
-## 開發與執行
+1. 在逐箭列表選取一箭；可用「只看待確認」或「只看低信心」縮小範圍。
+2. 位置與分數正確時，按「確認選中箭」。目前自動辨識箭點均需人工核對。
+3. 位置不正確時，按「微調」，依畫面提示在數位靶上相對滑動，觀察箭點位置及預覽分數。
+4. 調整完成後按「儲存」，再核對結果。
+5. 若離開尚未儲存的微調，選擇「取消」可繼續調整；選擇「放棄變更」則保留原位置。
+6. 要再次聽取結果，按「重新播報」。
 
----
+## 手動記錄、刪除與復原
 
-### 環境需求
+在箭點區點「更多操作 · 手動新增、重判與刪除」展開工具。小螢幕或大字體模式下，可向下捲動尋找。
 
-- Android Studio
-- JDK 17
-- Android SDK 36
-- Android 8.0+ 裝置或模擬器
+| 操作 | 使用方式與注意事項 |
+| --- | --- |
+| 手動新增箭 | 新增後，立即選取該箭並用「微調」移至實際落點，再儲存及確認。初始位置不是實際量測結果。 |
+| 刪除上一箭 | 刪除當局最後一箭；若誤刪，立即按提示列的「復原」。當局已變更或箭數已滿時可能無法復原。 |
+| 重判選中箭 | 將該箭重新標為待確認，供再次核對；不會重新從照片定位箭尖。 |
+| 確認高信心箭 | 只處理符合條件的箭點；目前自動辨識候選不列為高信心，請逐箭確認。 |
+| 清空 | 清除當局箭點，操作前會要求確認；請與「刪除上一箭」區分，清空沒有同樣的復原入口。 |
 
----
+## 結束當局與開始下一局
 
-### 指令
+1. 確認當局箭數、落點及分數，處理待確認與低信心箭點。
+2. 按「確認本局」或「下一輪」完成當局並進入下一局，兩個按鈕不需要連續按。
+3. 下一局重新確認靶面及校正狀態，完成後按「Set」恢復辨識。
 
-```bash
-./gradlew assembleDebug
-```
+## 查看數據
 
-Windows:
+點上方「數據頁」，可查看訓練總分、箭數、平均分、各局摘要、逐箭明細及歷史比較；按「回到即時頁」返回訓練。
 
-```bat
-gradlew.bat assembleDebug
-```
+- **CTC**：兩箭之間的最大距離，越小代表箭群越集中。
+- **Accuracy／偏心**：箭群中心到靶心的距離。
+- **Precision Mean Radius／平均散布半徑**：各箭到箭群中心的平均距離。
+- **Cpk X/Y**：水平與垂直方向的統計估計；少量箭點容易波動，不宜直接當作能力評分。
 
-安裝到已連接的 Android 裝置：
+歷史比較會檢查上一筆訓練是否為相同距離與靶紙，不符合時不提供該基準比較。「設定」中的「訓練紀錄」也可查看近期摘要。
 
-```bat
-gradlew.bat installDebug
-```
+**PNG、PDF、CSV 匯出尚未開放，按鈕目前停用。** 資料保存在手機本機，尚無雲端同步。
 
-APK 產出位置：
+## 這版的改善與限制
 
-```text
-app/build/outputs/apk/debug/app-debug.apk
-```
+0.2.0 改善語言切換、狀態提示、小螢幕捲動、刪箭復原及微調離開提醒，也降低光線變化造成的假箭風險。記錄失敗會暫停辨識，避免默默遺失箭點。
 
----
+使用時仍須留意：
 
-## 技術堆疊
+- 自動校正只針對接近正面的單靶面；斜拍、三靶面、外圈不完整或遮擋時可能無法使用。
+- 箭桿投影不一定能可靠指出入靶位置；模糊候選可能被拒判，需要手動補記。
+- 自動箭點的信心值不是準確率，不可省略人工確認。
+- 建置、單元測試及靜態檢查已通過，但戶外強光、實際箭點辨識、TTS 與各種裝置畫面仍需實機驗收。
 
-- Kotlin
-- Jetpack Compose
-- Navigation Compose
-- CameraX
-- Room
-- Android TextToSpeech
+## 驗收文件
 
----
-
-## `app/build.gradle.kts` 逐段解讀
-
-以下用這個專案的 [app/build.gradle.kts](app/build.gradle.kts) 當例子，說明每一段設定的功能與用途。
-
----
-
-### 第 1 行
-
-- `import org.jetbrains.kotlin.gradle.dsl.JvmTarget`
-  - 匯入 Kotlin Gradle DSL 裡的 `JvmTarget` 型別。
-  - 下面 `kotlin { compilerOptions { ... } }` 會用它指定 Kotlin 編譯輸出的 JVM 版本。
-
----
-
-### 第 3 到 7 行：`plugins`
-
-- `plugins { ... }`
-  - 宣告這個 `app` 模組會套用哪些 Gradle plugin。
-
-- `alias(libs.plugins.android.application)`
-  - 套用 Android Application plugin。
-  - 讓這個模組可以被當成 Android App 來編譯、打包成 APK。
-  - `alias(...)` 代表 plugin 版本不是直接寫在這裡，而是從 `gradle/libs.versions.toml` 讀取。
-
-- `alias(libs.plugins.compose.compiler)`
-  - 套用 Kotlin Compose compiler plugin。
-  - 讓 Kotlin 編譯器知道這個模組有使用 Jetpack Compose。
-
-- `alias(libs.plugins.legacy.kapt)`
-  - 套用 `kapt` 註解處理器 plugin。
-  - 這個專案的 Room 需要靠 `kapt` 產生資料庫相關程式碼。
-
----
-
-### 第 9 到 46 行：`android`
-
-- `android { ... }`
-  - Android 模組的主要建置設定都放在這裡。
-
----
-
-### 第 10 到 11 行：基本識別與編譯版本
-
-- `namespace = "com.autoarchery.app"`
-  - 指定 Android namespace。
-  - 這會影響產生的 `R` 類別與套件名稱空間。
-
-- `compileSdk = 36`
-  - 指定編譯時使用的 Android SDK 版本。
-  - 代表這個專案用 API 36 的 SDK 來編譯。
-
----
-
-### 第 13 到 20 行：`defaultConfig`
-
-- `defaultConfig { ... }`
-  - 放這個 app 預設的執行與打包設定。
-
-- `applicationId = "com.autoarchery.app"`
-  - App 在 Android 系統裡的唯一識別值。
-  - 安裝到手機後，系統就是靠它辨識這個 App。
-
-- `minSdk = 26`
-  - App 最低支援 Android API 26，也就是 Android 8.0。
-
-- `targetSdk = 36`
-  - 告訴系統這個 App 是以 API 36 的行為規範為目標。
-  - 它不代表最低需求，而是代表你有針對較新的 Android 行為做相容。
-
-- `versionCode = 1`
-  - 給系統與商店判斷升級順序用的整數版本號。
-  - 每次正式發新版通常都要遞增。
-
-- `versionName = "0.1.0"`
-  - 給使用者看的版本字串。
-  - 這個專案目前標成 `0.1.0`，符合 MVP / prototype 階段。
-
-- `testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"`
-  - 指定 Android instrumentation test 使用的測試執行器。
-  - 如果之後要跑裝置上的 UI / integration test，會用到它。
-
----
-
-### 第 22 到 30 行：`buildTypes`
-
-- `buildTypes { ... }`
-  - 定義不同建置型態，例如 `debug`、`release`。
-  - 這個檔案目前只特別設定 `release`。
-
-- `release { ... }`
-  - 指定 release 版的打包規則。
-
-- `isMinifyEnabled = false`
-  - 代表 release 版目前不啟用程式碼壓縮、混淆與裁剪。
-  - 這樣比較方便原型開發與除錯，但正式上架前通常會再評估開啟。
-
-- `proguardFiles(...)`
-  - 指定 release 版打包時使用的 ProGuard / R8 規則檔。
-
-- `getDefaultProguardFile("proguard-android-optimize.txt")`
-  - 使用 Android 預設提供的最佳化規則。
-
-- `"proguard-rules.pro"`
-  - 再額外套用這個專案自己的規則檔。
-
----
-
-### 第 32 到 35 行：`compileOptions`
-
-- `compileOptions { ... }`
-  - 設定 Java 編譯器相關版本。
-
-- `sourceCompatibility = JavaVersion.VERSION_17`
-  - 原始碼語法以 Java 17 為基準。
-
-- `targetCompatibility = JavaVersion.VERSION_17`
-  - 編譯後輸出的位元碼也以 Java 17 相容為目標。
-
----
-
-### 第 37 到 39 行：`buildFeatures`
-
-- `buildFeatures { compose = true }`
-  - 明確告訴 Android Gradle Plugin 這個模組啟用了 Jetpack Compose。
-  - 沒有這行時，Compose UI 相關功能不會完整開啟。
-
----
-
-### 第 41 到 45 行：`packaging`
-
-- `packaging { resources { ... } }`
-  - 用來處理打包 APK 時的資源衝突與排除規則。
-
-- `excludes += "/META-INF/{AL2.0,LGPL2.1}"`
-  - 排除某些第三方函式庫內附的授權檔。
-  - 這類 `META-INF` 檔案有時會在多個依賴裡重複出現，造成打包衝突。
-
----
-
-### 第 48 到 52 行：`kotlin`
-
-- `kotlin { compilerOptions { ... } }`
-  - 設定 Kotlin 編譯器的選項。
-
-- `jvmTarget = JvmTarget.JVM_17`
-  - 指定 Kotlin 編譯輸出目標也是 JVM 17。
-  - 這要和前面的 Java 17 設定保持一致，避免編譯結果不一致。
-
----
-
-### 第 54 到 59 行：`kapt`
-
-- `kapt { ... }`
-  - 設定 Kotlin 註解處理器。
-  - Room 的 `@Database`、`@Dao`、`@Entity` 會在這裡觸發產碼流程。
-
-- `correctErrorTypes = true`
-  - 讓 kapt 在某些型別尚未完整產生時，仍能更穩定處理 annotation processing。
-  - 這常見於 Room、Dagger 之類會自動產碼的工具。
-
-- `arguments { arg("room.schemaLocation", "$projectDir/schemas") }`
-  - 傳參數給 Room compiler。
-  - 告訴 Room 把 schema JSON 輸出到 `app/schemas`。
-  - 這個專案已經把 schema 檔追蹤進 git，方便資料庫版本管理與 migration 檢查。
-
----
-
-### 第 61 到 88 行：`dependencies`
-
-- `dependencies { ... }`
-  - 宣告這個模組需要的所有函式庫。
-
----
-
-### 第 62 到 72 行：AndroidX 與 CameraX 基礎依賴
-
-- `implementation(libs.androidx.core.ktx)`
-  - 提供 Android KTX 擴充函式，讓 Android API 更好寫。
-
-- `implementation(libs.androidx.lifecycle.runtime.ktx)`
-  - 提供 Lifecycle 與 coroutine 相關整合。
-
-- `implementation(libs.androidx.lifecycle.runtime.compose)`
-  - 讓 Compose 可以更方便觀察 lifecycle-aware 狀態。
-
-- `implementation(libs.androidx.lifecycle.viewmodel.ktx)`
-  - 提供 ViewModel 與 coroutine 的擴充支援。
-
-- `implementation(libs.androidx.lifecycle.viewmodel.compose)`
-  - 讓 Compose 畫面中可以直接取得 ViewModel。
-
-- `implementation(libs.androidx.activity.compose)`
-  - 提供 Compose 與 Android Activity 的整合。
-
-- `implementation(libs.androidx.navigation.compose)`
-  - 提供 Compose Navigation。
-  - 這個專案的 Live / Metrics / Settings 頁面切換就是靠它。
-
-- `implementation(libs.androidx.camera.core)`
-  - CameraX 核心功能。
-
-- `implementation(libs.androidx.camera.camera2)`
-  - 讓 CameraX 能透過 Camera2 後端與裝置相機溝通。
-
-- `implementation(libs.androidx.camera.lifecycle)`
-  - 把相機生命週期綁到 `LifecycleOwner`，避免畫面切換時資源沒釋放。
-
-- `implementation(libs.androidx.camera.view)`
-  - 提供 `PreviewView` 等相機預覽 UI 元件。
-
----
-
-### 第 74 到 80 行：Compose UI 依賴
-
-- `implementation(platform(libs.androidx.compose.bom))`
-  - 先引入 Compose BOM。
-  - BOM 會統一 Compose 相關套件版本，避免每個 Compose library 各自版本不一致。
-
-- `implementation(libs.androidx.compose.ui)`
-  - Compose 基本 UI 元件。
-
-- `implementation(libs.androidx.compose.ui.graphics)`
-  - Compose 圖形與繪圖能力。
-  - 這個專案在數位靶與箭點標記會用到。
-
-- `implementation(libs.androidx.compose.ui.tooling.preview)`
-  - 支援 Compose Preview。
-
-- `implementation(libs.androidx.compose.foundation)`
-  - 提供 `Column`、`Row`、`LazyColumn`、手勢等基礎元件。
-
-- `implementation(libs.androidx.compose.material3)`
-  - 提供 Material 3 元件。
-  - 這個專案大部分畫面按鈕、卡片、TopAppBar 都來自這裡。
-
-- `implementation(libs.androidx.compose.material.icons.extended)`
-  - 提供更多 Material Icons。
-
----
-
-### 第 82 到 84 行：Room 依賴
-
-- `implementation(libs.androidx.room.runtime)`
-  - Room 執行期核心函式庫。
-
-- `implementation(libs.androidx.room.ktx)`
-  - Room 的 Kotlin / coroutine 擴充。
-
-- `kapt(libs.androidx.room.compiler)`
-  - Room annotation processor。
-  - 會依照 `@Dao`、`@Entity`、`@Database` 產生實際的資料庫實作程式碼。
-
----
-
-### 第 86 到 87 行：只在 debug 版使用的依賴
-
-- `debugImplementation(libs.androidx.compose.ui.tooling)`
-  - 只在 debug build 加入 Compose tooling。
-  - 正式版不會把這些除錯工具打包進去。
-
-- `debugImplementation(libs.androidx.compose.ui.test.manifest)`
-  - 提供 Compose UI 測試在 debug 環境下需要的 manifest 支援。
-
----
-
-### 這份檔案在這個專案裡的角色
-
-- 它是 `app` 模組的建置腳本。
-- 它決定這個 Android App：
-  - 用哪些 plugin
-  - 支援哪些 Android 版本
-  - 用哪個 Java / Kotlin 版本編譯
-  - 是否啟用 Compose
-  - 依賴哪些函式庫
-  - release 版怎麼打包
-
-如果你把它想成一張「App 建置說明書」，會很好理解：Gradle 讀這份檔案後，才知道要怎麼把這個專案編譯成可安裝的 Android App。
-
----
-
-## 專案結構
-
-```text
-app/src/main/java/com/autoarchery/app/
-  data/        資料庫、DAO、Repository
-  domain/      判分、座標與時鐘方向邏輯
-  navigation/  App 導航
-  speech/      TTS 協調器
-  ui/          Live / Metrics / Settings 畫面
-  vision/      靶面校正與箭點偵測
-
-docs/
-  mvp-spec.md              MVP 規格
-  compose-wireframes.md    UI 草圖
-  backlog-phase-1-3.md     開發待辦
-```
-
----
-
-## 目前限制
-
-- 目前定位為單一標靶、離線本機使用，不包含雲端同步或多人帳號。
-- 影像辨識目前是規則式 MVP 演算法，最適合固定腳架、穩定構圖、單一靶面場景。
-- 目前支援的靶紙規格只有 `122 cm` 與 `40 cm`。
-- 匯出按鈕 UI 已經放上，但 `PNG / PDF / CSV` 匯出流程尚未接完成。
-- 設定頁已可保存顯示語言偏好，但完整的執行中 UI locale 切換仍有擴充空間；目前語音播報語言的行為較完整。
-
----
-
-## 參考文件
-
+- [UI 操作與裝置驗收清單](docs/qa/ux-validation.md)
+- [視覺辨識驗收與已知限制](docs/qa/vision-validation.md)
 - [MVP 規格](docs/mvp-spec.md)
-- [Compose Wireframes](docs/compose-wireframes.md)
-- [Backlog](docs/backlog-phase-1-3.md)
+- [開發待辦](docs/backlog-phase-1-3.md)
